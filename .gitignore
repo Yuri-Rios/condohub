@@ -1,0 +1,18 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# SQLite (se você não quiser versionar o banco)
+*.db
+
+# Next.js
+node_modules/
+.next/
+
+# Ambiente
+.env
+.env.local
+
+# macOS
+.DS_Store
