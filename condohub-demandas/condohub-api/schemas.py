@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel
 
 
@@ -12,6 +13,7 @@ class OcorrenciaResposta(BaseModel):
     titulo: str
     local: str
     descricao: str
+    data_solicitacao: datetime
 
     class Config:
         from_attributes = True
