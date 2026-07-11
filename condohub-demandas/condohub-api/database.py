@@ -18,7 +18,11 @@ if not DATABASE_URL:
         "nas variáveis de ambiente do serviço."
     )
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    connect_args={"options": "-c timezone=America/Fortaleza"},
+)
 
 SessionLocal = sessionmaker(
     autocommit=False,

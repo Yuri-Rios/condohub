@@ -20,8 +20,23 @@ function calcularDias(dataSolicitacao: string) {
   const dataInicial = new Date(dataSolicitacao);
   const hoje = new Date();
 
-  const diferenca = hoje.getTime() - dataInicial.getTime();
-  return Math.floor(diferenca / (1000 * 60 * 60 * 24));
+  const formatador = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Fortaleza",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  function inicioDoDia(data: Date) {
+    const partes = formatador.formatToParts(data);
+    const valor = (tipo: Intl.DateTimeFormatPartTypes) =>
+      Number(partes.find((parte) => parte.type === tipo)?.value);
+
+    return Date.UTC(valor("year"), valor("month") - 1, valor("day"));
+  }
+
+  const diferenca = inicioDoDia(hoje) - inicioDoDia(dataInicial);
+  return Math.max(0, Math.floor(diferenca / (1000 * 60 * 60 * 24)));
 }
 
 export default function OcorrenciasPage() {

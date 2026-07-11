@@ -1,8 +1,15 @@
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from sqlalchemy import Column, DateTime, Integer, String
-from sqlalchemy.sql import func
 
 from database import Base
-from datetime import datetime
+
+FUSO_BRASIL = ZoneInfo("America/Fortaleza")
+
+
+def agora_no_brasil():
+    return datetime.now(FUSO_BRASIL)
 
 class Ocorrencia(Base):
     __tablename__ = "ocorrencias"
@@ -10,4 +17,8 @@ class Ocorrencia(Base):
     titulo = Column(String)
     local = Column(String)
     descricao = Column(String)
-    data_solicitacao = Column(DateTime, default=datetime.now)
+    data_solicitacao = Column(
+        DateTime(timezone=True),
+        default=agora_no_brasil,
+        nullable=False,
+    )
