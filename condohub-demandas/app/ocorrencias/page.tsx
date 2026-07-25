@@ -13,9 +13,6 @@ type Ocorrencia = {
   data_solicitacao: string;
 };
 
-// const API = "http://127.0.0.1:8000";
-const API = process.env.NEXT_PUBLIC_API_URL;
-
 function calcularDias(dataSolicitacao: string) {
   const dataInicial = new Date(dataSolicitacao);
   const hoje = new Date();
@@ -41,12 +38,24 @@ function calcularDias(dataSolicitacao: string) {
 
 export default function OcorrenciasPage() {
   const [ocorrencias, setOcorrencias] = useState<Ocorrencia[]>([]);
+  const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
     async function carregarOcorrencias() {
-      const resposta = await fetch(`${API}/ocorrencias`);
-      const dados = await resposta.json();
-      setOcorrencias(dados);
+      try {
+        const resposta = await fetch("/api/ocorrencias");
+
+        if (!resposta.ok) {
+          throw new Error("Não foi possível carregar as ocorrências.");
+        }
+
+        setOcorrencias(await resposta.json());
+      } catch (error) {
+        setErro(error instanceof Error ? error.message : "Erro inesperado.");
+      } finally {
+        setCarregando(false);
+      }
     }
 
     carregarOcorrencias();
@@ -59,7 +68,11 @@ export default function OcorrenciasPage() {
       <Titulo texto="Ocorrências" />
 
       <div className="mt-6 rounded-lg bg-white p-4 shadow">
-        {ocorrencias.length === 0 ? (
+        {carregando ? (
+          <p className="text-gray-600">Carregando ocorrências...</p>
+        ) : erro ? (
+          <p className="text-red-700">{erro}</p>
+        ) : ocorrencias.length === 0 ? (
           <p className="text-gray-600">Nenhuma ocorrência cadastrada.</p>
         ) : (
           <table className="w-full border-collapse">

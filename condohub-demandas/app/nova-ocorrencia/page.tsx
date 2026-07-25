@@ -7,13 +7,11 @@ import Input from "@/components/Input";
 import Textarea from "@/components/Textarea";
 import Navbar from "@/components/Navbar";
 
-// const API = "http://127.0.0.1:8000";
-const API = process.env.NEXT_PUBLIC_API_URL;
-
 export default function NovaOcorrenciaPage() {
   const [titulo, setTitulo] = useState("");
   const [local, setLocal] = useState("");
   const [descricao, setDescricao] = useState("");
+  const [salvando, setSalvando] = useState(false);
 
   async function salvarOcorrencia(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -23,28 +21,30 @@ export default function NovaOcorrenciaPage() {
       return;
     }
 
-    const resposta = await fetch(`${API}/ocorrencias`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        titulo,
-        local,
-        descricao,
-      }),
-    });
+    setSalvando(true);
 
-    if (!resposta.ok) {
-      alert("Erro ao salvar.");
-      return;
+    try {
+      const resposta = await fetch("/api/ocorrencias", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ titulo, local, descricao }),
+      });
+
+      if (!resposta.ok) {
+        throw new Error();
+      }
+
+      setTitulo("");
+      setLocal("");
+      setDescricao("");
+      alert("Ocorrência salva com sucesso.");
+    } catch {
+      alert("Erro ao salvar. Verifique sua sessão e tente novamente.");
+    } finally {
+      setSalvando(false);
     }
-
-    setTitulo("");
-    setLocal("");
-    setDescricao("");
-
-    alert("Ocorrência salva com sucesso.");
   }
 
   return (
@@ -80,9 +80,10 @@ export default function NovaOcorrenciaPage() {
 
         <button
           type="submit"
+          disabled={salvando}
           className="rounded bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800"
         >
-          Salvar
+          {salvando ? "Salvando..." : "Salvar"}
         </button>
       </form>
     </main>
