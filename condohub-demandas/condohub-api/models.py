@@ -69,6 +69,25 @@ class ReacaoMensagem(Base):
     criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
 
 
+class ReservaAmbiente(Base):
+    __tablename__ = "reservas_ambientes"
+    __table_args__ = (
+        UniqueConstraint(
+            "ambiente",
+            "inicio",
+            name="uq_reserva_ambiente_inicio",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    ambiente = Column(String(30), nullable=False, index=True)
+    inicio = Column(DateTime(timezone=True), nullable=False, index=True)
+    fim = Column(DateTime(timezone=True), nullable=False)
+    morador_id = Column(String(255), nullable=False, index=True)
+    morador_nome = Column(String(160), nullable=False)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
 class SolicitacaoAcesso(Base):
     __tablename__ = "solicitacoes_acesso"
 

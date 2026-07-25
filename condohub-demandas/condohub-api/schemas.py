@@ -1,4 +1,5 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
@@ -79,6 +80,50 @@ class StatusOcorrenciaAlterar(BaseModel):
     def validar_status(cls, valor: str):
         if valor not in {"novo", "em_andamento", "em_espera", "fechado"}:
             raise ValueError("Status inválido.")
+        return valor
+
+
+class ReservaCriar(BaseModel):
+    ambiente: str
+    inicio: datetime
+
+    @field_validator("ambiente")
+    @classmethod
+    def validar_ambiente(cls, valor: str):
+        if valor not in {"piscina_deck", "salao_festas"}:
+            raise ValueError("Ambiente inválido.")
+        return valor
+
+    @field_validator("inicio")
+    @classmethod
+    def validar_inicio(cls, valor: datetime):
+        if valor.tzinfo is None:
+            raise ValueError("O horário precisa informar o fuso.")
+        horario_local = valor.astimezone(ZoneInfo("America/Fortaleza"))
+        if horario_local.minute != 0 or horario_local.hour not in range(8, 22, 2):
+            raise ValueError("Selecione um dos horários disponíveis.")
+        return valor
+
+
+class ReservaResposta(BaseModel):
+    id: int | None
+    ambiente: str
+    inicio: datetime
+    fim: datetime
+    minha: bool
+
+
+class ReservaReagendar(BaseModel):
+    inicio: datetime
+
+    @field_validator("inicio")
+    @classmethod
+    def validar_inicio(cls, valor: datetime):
+        if valor.tzinfo is None:
+            raise ValueError("O horário precisa informar o fuso.")
+        horario_local = valor.astimezone(ZoneInfo("America/Fortaleza"))
+        if horario_local.minute != 0 or horario_local.hour not in range(8, 22, 2):
+            raise ValueError("Selecione um dos horários disponíveis.")
         return valor
 
 

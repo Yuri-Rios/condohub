@@ -27,6 +27,7 @@ export default function Navbar() {
   const podeAdministrar = papeis.some((papel) =>
     ["sindico", "subsindico", "admin"].includes(papel),
   );
+  const podeAgendar = papeis.includes("morador");
   const [pendentes, setPendentes] = useState(0);
 
   useEffect(() => {
@@ -75,6 +76,14 @@ export default function Navbar() {
           >
             Chamados
           </Link>
+          {podeAgendar && (
+            <Link
+              href="/agendamentos"
+              className={`whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold ${ativo("/agendamentos")}`}
+            >
+              Agendamentos
+            </Link>
+          )}
           {podeAdministrar && (
             <Link
               href="/administracao/solicitacoes"

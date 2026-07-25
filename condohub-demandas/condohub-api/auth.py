@@ -113,6 +113,17 @@ def exigir_usuario_aprovado(
     return usuario
 
 
+def exigir_morador(
+    usuario: Annotated[UsuarioAutenticado, Depends(usuario_atual)],
+) -> UsuarioAutenticado:
+    if "morador" not in usuario.papeis:
+        raise HTTPException(
+            status_code=403,
+            detail="Reservas disponíveis somente para moradores.",
+        )
+    return usuario
+
+
 def exigir_aprovador(
     usuario: Annotated[UsuarioAutenticado, Depends(usuario_atual)],
 ) -> UsuarioAutenticado:

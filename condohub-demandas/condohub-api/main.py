@@ -1,6 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import Depends, FastAPI, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +12,7 @@ from auth import (
     exigir_admin,
     exigir_aprovador,
     exigir_gestor,
+    exigir_morador,
     exigir_usuario_aprovado,
 )
 from clerk import buscar_perfil_clerk
@@ -20,6 +22,7 @@ from models import (
     MensagemOcorrencia,
     Ocorrencia,
     ReacaoMensagem,
+    ReservaAmbiente,
     SolicitacaoAcesso,
 )
 from schemas import (
@@ -29,6 +32,9 @@ from schemas import (
     MensagemCriar,
     MensagemResposta,
     ReacaoAlternar,
+    ReservaCriar,
+    ReservaReagendar,
+    ReservaResposta,
     StatusOcorrenciaAlterar,
     SolicitacaoAcessoCriar,
     SolicitacaoAcessoResposta,
@@ -65,6 +71,130 @@ def pegar_banco():
 @app.get("/")
 def inicio():
     return {"mensagem": "API de ocorrências funcionando"}
+
+
+def _validar_data_reserva(inicio: datetime):
+    agora = datetime.now(FUSO_BRASIL)
+    inicio_local = inicio.astimezone(FUSO_BRASIL)
+    if inicio_local <= agora:
+        raise HTTPException(
+            status_code=422,
+            detail="Escolha um horário futuro.",
+        )
+    if inicio_local > agora + timedelta(days=90):
+        raise HTTPException(
+            status_code=422,
+            detail="As reservas podem ser feitas com até 90 dias de antecedência.",
+        )
+
+
+def _reserva_resposta(
+    reserva: ReservaAmbiente,
+    usuario: UsuarioAutenticado,
+):
+    minha = reserva.morador_id == usuario.id
+    return {
+        "id": reserva.id if minha else None,
+        "ambiente": reserva.ambiente,
+        "inicio": reserva.inicio,
+        "fim": reserva.fim,
+        "minha": minha,
+    }
+
+
+@app.get("/reservas", response_model=list[ReservaResposta])
+def listar_reservas(
+    inicio: datetime,
+    fim: datetime,
+    banco: Session = Depends(pegar_banco),
+    usuario: UsuarioAutenticado = Depends(exigir_morador),
+):
+    if inicio.tzinfo is None or fim.tzinfo is None or fim <= inicio:
+        raise HTTPException(status_code=422, detail="Período inválido.")
+    if fim - inicio > timedelta(days=14):
+        raise HTTPException(
+            status_code=422,
+            detail="Consulte no máximo duas semanas por vez.",
+        )
+
+    reservas = (
+        banco.query(ReservaAmbiente)
+        .filter(
+            ReservaAmbiente.inicio >= inicio,
+            ReservaAmbiente.inicio < fim,
+        )
+        .order_by(ReservaAmbiente.inicio.asc())
+        .all()
+    )
+    return [_reserva_resposta(reserva, usuario) for reserva in reservas]
+
+
+@app.post("/reservas", response_model=ReservaResposta, status_code=201)
+def criar_reserva(
+    dados: ReservaCriar,
+    banco: Session = Depends(pegar_banco),
+    usuario: UsuarioAutenticado = Depends(exigir_morador),
+):
+    _validar_data_reserva(dados.inicio)
+    perfil = buscar_perfil_clerk(usuario.id)
+    reserva = ReservaAmbiente(
+        ambiente=dados.ambiente,
+        inicio=dados.inicio,
+        fim=dados.inicio + timedelta(hours=2),
+        morador_id=usuario.id,
+        morador_nome=perfil.nome,
+    )
+    banco.add(reserva)
+    try:
+        banco.commit()
+    except IntegrityError as erro:
+        banco.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Este horário acabou de ser reservado.",
+        ) from erro
+    banco.refresh(reserva)
+    return _reserva_resposta(reserva, usuario)
+
+
+@app.patch("/reservas/{reserva_id}", response_model=ReservaResposta)
+def reagendar_reserva(
+    reserva_id: int,
+    dados: ReservaReagendar,
+    banco: Session = Depends(pegar_banco),
+    usuario: UsuarioAutenticado = Depends(exigir_morador),
+):
+    reserva = banco.get(ReservaAmbiente, reserva_id)
+    if not reserva or reserva.morador_id != usuario.id:
+        raise HTTPException(status_code=404, detail="Reserva não encontrada.")
+
+    _validar_data_reserva(dados.inicio)
+    reserva.inicio = dados.inicio
+    reserva.fim = dados.inicio + timedelta(hours=2)
+    try:
+        banco.commit()
+    except IntegrityError as erro:
+        banco.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Este horário acabou de ser reservado.",
+        ) from erro
+    banco.refresh(reserva)
+    return _reserva_resposta(reserva, usuario)
+
+
+@app.delete("/reservas/{reserva_id}", status_code=204)
+def cancelar_reserva(
+    reserva_id: int,
+    banco: Session = Depends(pegar_banco),
+    usuario: UsuarioAutenticado = Depends(exigir_morador),
+):
+    reserva = banco.get(ReservaAmbiente, reserva_id)
+    if not reserva or reserva.morador_id != usuario.id:
+        raise HTTPException(status_code=404, detail="Reserva não encontrada.")
+
+    banco.delete(reserva)
+    banco.commit()
 
 
 @app.get("/ocorrencias", response_model=list[OcorrenciaResposta])
