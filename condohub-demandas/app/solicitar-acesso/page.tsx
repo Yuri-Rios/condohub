@@ -58,30 +58,45 @@ export default function SolicitarAcessoPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-100 p-6">
-      <div className="mx-auto max-w-xl">
-        <h1 className="text-3xl font-bold text-blue-700">Solicitar acesso</h1>
-        <p className="mt-2 text-gray-600">
-          O síndico analisará seus dados antes da criação da conta.
-        </p>
+    <main className="min-h-screen px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-2xl">
+        <Link href="/entrar" className="inline-flex items-center gap-2 font-bold text-slate-950">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-blue-600 to-sky-500 text-sm font-black text-white shadow-sm">
+            CH
+          </span>
+          CondoHub
+        </Link>
 
-        <form onSubmit={enviar} className="mt-6 space-y-4 rounded-lg bg-white p-6 shadow">
+        <div className="mt-10">
+          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-blue-700">
+            Acesso ao condomínio
+          </span>
+          <h1 className="mt-4 text-4xl font-bold tracking-tight text-slate-950">
+            Solicite seu acesso
+          </h1>
+          <p className="mt-3 max-w-xl text-base leading-7 text-slate-600">
+            Preencha seus dados. A administração confere a solicitação e, após
+            a aprovação, você recebe o convite por e-mail.
+          </p>
+        </div>
+
+        <form onSubmit={enviar} className="mt-8 space-y-5 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_16px_50px_rgba(15,23,42,0.08)] sm:p-8">
           <label className="block">
-            <span className="text-sm font-medium">Nome completo</span>
-            <input name="nome" required className="mt-1 w-full rounded border p-2" />
+            <span className="text-sm font-semibold text-slate-700">Nome completo</span>
+            <input name="nome" required placeholder="Como aparece no documento" className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" />
           </label>
 
           <label className="block">
-            <span className="text-sm font-medium">E-mail</span>
-            <input name="email" type="email" required className="mt-1 w-full rounded border p-2" />
+            <span className="text-sm font-semibold text-slate-700">E-mail</span>
+            <input name="email" type="email" required placeholder="voce@exemplo.com" className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" />
           </label>
 
           <label className="block">
-            <span className="text-sm font-medium">Solicito acesso como</span>
+            <span className="text-sm font-semibold text-slate-700">Solicito acesso como</span>
             <select
               value={tipo}
               onChange={(event) => setTipo(event.target.value)}
-              className="mt-1 w-full rounded border p-2"
+              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
             >
               <option value="morador">Morador(a)</option>
               <option value="funcionario">Funcionário</option>
@@ -89,18 +104,18 @@ export default function SolicitarAcessoPage() {
           </label>
 
           {tipo === "morador" && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-5 sm:grid-cols-2">
               <label>
-                <span className="text-sm font-medium">Bloco</span>
+                <span className="text-sm font-semibold text-slate-700">Bloco</span>
                 <input
                   name="bloco"
                   required
                   placeholder="Ex.: Único"
-                  className="mt-1 w-full rounded border p-2"
+                  className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
                 />
               </label>
               <label>
-                <span className="text-sm font-medium">Apartamento</span>
+                <span className="text-sm font-semibold text-slate-700">Apartamento</span>
                 <input
                   name="apartamento"
                   required
@@ -119,7 +134,7 @@ export default function SolicitarAcessoPage() {
                     setApartamento(valor);
                     setErroApartamento("");
                   }}
-                  className="mt-1 w-full rounded border p-2"
+                  className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
                 />
                 {erroApartamento && (
                   <span className="mt-1 block text-xs text-red-700">
@@ -131,23 +146,26 @@ export default function SolicitarAcessoPage() {
           )}
 
           <label className="block">
-            <span className="text-sm font-medium">Observação (opcional)</span>
-            <textarea name="observacao" className="mt-1 min-h-24 w-full rounded border p-2" />
+            <span className="text-sm font-semibold text-slate-700">Observação <span className="font-normal text-slate-400">(opcional)</span></span>
+            <textarea name="observacao" placeholder="Alguma informação que ajude na validação?" className="mt-2 min-h-28 w-full resize-none rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" />
           </label>
 
-          {mensagem && <p className="text-sm text-gray-700">{mensagem}</p>}
+          {mensagem && <p className="rounded-xl bg-blue-50 p-4 text-sm font-medium text-blue-800">{mensagem}</p>}
 
           <button
             disabled={enviando}
-            className="rounded bg-blue-700 px-4 py-2 font-medium text-white disabled:opacity-60"
+            className="w-full rounded-xl bg-blue-600 px-5 py-3.5 font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {enviando ? "Enviando..." : "Enviar solicitação"}
           </button>
         </form>
 
-        <Link href="/entrar" className="mt-4 inline-block text-blue-700 underline">
-          Já tenho acesso
-        </Link>
+        <p className="mt-6 text-center text-sm text-slate-600">
+          Já recebeu seu acesso?{" "}
+          <Link href="/entrar" className="font-semibold text-blue-700 hover:text-blue-800">
+            Entrar no CondoHub
+          </Link>
+        </p>
       </div>
     </main>
   );

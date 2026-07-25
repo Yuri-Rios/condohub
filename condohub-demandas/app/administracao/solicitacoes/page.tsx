@@ -72,44 +72,68 @@ export default function SolicitacoesPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-100 p-6">
+    <main className="min-h-screen px-4 py-3 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
       <Navbar />
-      <Titulo texto="Solicitações de acesso" />
-      {erro && <p className="mt-4 rounded bg-red-100 p-3 text-red-800">{erro}</p>}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <Titulo
+          texto="Solicitações de acesso"
+          subtitulo="Valide os dados antes de permitir a entrada de novos usuários."
+        />
+        <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800">
+          {solicitacoes.filter((item) => item.status === "pendente").length} pendentes
+        </div>
+      </div>
+      {erro && <p className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800">{erro}</p>}
 
-      <div className="mt-6 space-y-4">
+      <div className="mt-8 space-y-4">
         {solicitacoes.filter((item) => item.status === "pendente").length === 0 ? (
-          <div className="rounded-lg bg-white p-4 shadow">Nenhuma solicitação pendente.</div>
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-10 text-center shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-50 text-xl text-emerald-600">✓</div>
+            <h2 className="mt-4 font-semibold text-slate-900">Fila em dia</h2>
+            <p className="mt-1 text-sm text-slate-500">Nenhuma solicitação aguarda análise.</p>
+          </div>
         ) : (
           solicitacoes
             .filter((item) => item.status === "pendente")
             .map((item) => (
-              <article key={item.id} className="rounded-lg bg-white p-5 shadow">
-                <div className="flex flex-wrap justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg font-semibold">{item.nome}</h2>
-                    <p className="text-gray-600">{item.email}</p>
-                    <p className="mt-2">
+              <article key={item.id} className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)] sm:p-6">
+                <div className="flex flex-col justify-between gap-5 md:flex-row">
+                  <div className="flex gap-4">
+                    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-100 font-bold text-blue-700">
+                      {item.nome.slice(0, 1).toUpperCase()}
+                    </div>
+                    <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-lg font-semibold text-slate-950">{item.nome}</h2>
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">Pendente</span>
+                    </div>
+                    <p className="mt-0.5 text-sm text-slate-500">{item.email}</p>
+                    <p className="mt-3 font-medium text-slate-700">
                       {item.tipo === "morador"
                         ? `Morador(a) — Bloco ${item.bloco}, apto. ${item.apartamento}`
                         : "Funcionário"}
                     </p>
                     {item.observacao && (
-                      <p className="mt-2 text-sm text-gray-600">{item.observacao}</p>
+                      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{item.observacao}</p>
                     )}
+                    <p className="mt-3 text-xs text-slate-400">
+                      Solicitado em {new Date(item.criado_em).toLocaleDateString("pt-BR")}
+                    </p>
+                    </div>
                   </div>
-                  <div className="flex items-start gap-2">
+                  <div className="flex shrink-0 items-start gap-2">
                     <button
                       disabled={processando === item.id}
                       onClick={() => decidir(item.id, "recusar")}
-                      className="rounded border border-red-700 px-3 py-2 text-red-700"
+                      className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50"
                     >
                       Recusar
                     </button>
                     <button
                       disabled={processando === item.id}
                       onClick={() => decidir(item.id, "aprovar")}
-                      className="rounded bg-blue-700 px-3 py-2 text-white"
+                      className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
                     >
                       Aprovar e convidar
                     </button>
@@ -118,6 +142,7 @@ export default function SolicitacoesPage() {
               </article>
             ))
         )}
+      </div>
       </div>
     </main>
   );

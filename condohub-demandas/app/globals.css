@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f3f4f6;
-  --foreground: #171717;
+  --background: #f4f7fb;
+  --foreground: #162033;
 }
 
 @theme inline {
@@ -15,5 +15,21 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  background-image:
+    radial-gradient(circle at 8% 0%, rgba(37, 99, 235, 0.08), transparent 26rem),
+    radial-gradient(circle at 100% 24%, rgba(14, 165, 233, 0.06), transparent 24rem);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition-duration: 160ms;
+}
+
+::selection {
+  background: #bfdbfe;
+  color: #172554;
 }

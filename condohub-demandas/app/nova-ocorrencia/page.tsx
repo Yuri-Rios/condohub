@@ -48,32 +48,36 @@ export default function NovaOcorrenciaPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-100 p-6">
+    <main className="min-h-screen px-4 py-3 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
       <Navbar />
 
-      <Titulo texto="Nova Ocorrência" />
+      <Titulo
+        texto="Novo chamado"
+        subtitulo="Conte o que aconteceu e informe onde a equipe deve verificar."
+      />
 
       <form
         onSubmit={salvarOcorrencia}
-        className="mt-6 max-w-xl rounded-lg bg-white p-4 shadow"
+        className="mt-8 max-w-2xl space-y-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_12px_40px_rgba(15,23,42,0.06)] sm:p-8"
       >
         <Input
           label="Título"
-          placeholder="Ex.: Vazamento na garagem"
+          placeholder="Ex.: Vazamento próximo ao portão"
           value={titulo}
           onChange={setTitulo}
         />
 
         <Input
           label="Local"
-          placeholder="Bloco A - Garagem"
+          placeholder="Ex.: Garagem, próximo à vaga 12"
           value={local}
           onChange={setLocal}
         />
 
         <Textarea
           label="Descrição"
-          placeholder="Descreva o problema encontrado"
+          placeholder="Descreva o problema com detalhes para facilitar o atendimento."
           value={descricao}
           onChange={setDescricao}
         />
@@ -81,11 +85,12 @@ export default function NovaOcorrenciaPage() {
         <button
           type="submit"
           disabled={salvando}
-          className="rounded bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800"
+          className="inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
-          {salvando ? "Salvando..." : "Salvar"}
+          {salvando ? "Enviando chamado..." : "Enviar chamado"}
         </button>
       </form>
+      </div>
     </main>
   );
 }
