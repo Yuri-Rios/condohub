@@ -1,9 +1,12 @@
 import { SignIn } from "@clerk/nextjs";
 import Link from "next/link";
 
+import AquecerApi from "@/components/AquecerApi";
+
 export default function EntrarPage() {
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
+      <AquecerApi />
       <div className="absolute left-[-8rem] top-[-8rem] h-80 w-80 rounded-full bg-blue-200/50 blur-3xl" />
       <div className="absolute bottom-[-10rem] right-[-8rem] h-96 w-96 rounded-full bg-sky-200/40 blur-3xl" />
       <div className="relative flex w-full max-w-md flex-col items-center gap-5">

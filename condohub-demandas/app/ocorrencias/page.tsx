@@ -93,18 +93,28 @@ export default function OcorrenciasPage() {
 
   useEffect(() => {
     async function carregarOcorrencias() {
-      try {
-        const resposta = await fetch("/api/ocorrencias");
+      for (let tentativa = 1; tentativa <= 3; tentativa += 1) {
+        try {
+          const resposta = await fetch("/api/ocorrencias");
 
-        if (!resposta.ok) {
-          throw new Error("Não foi possível carregar as ocorrências.");
+          if (!resposta.ok) {
+            throw new Error("Não foi possível carregar as ocorrências.");
+          }
+
+          setOcorrencias(await resposta.json());
+          setCarregando(false);
+          return;
+        } catch (error) {
+          if (tentativa === 3) {
+            setErro(
+              error instanceof Error ? error.message : "Erro inesperado.",
+            );
+            setCarregando(false);
+            return;
+          }
+
+          await new Promise((resolver) => setTimeout(resolver, tentativa * 2500));
         }
-
-        setOcorrencias(await resposta.json());
-      } catch (error) {
-        setErro(error instanceof Error ? error.message : "Erro inesperado.");
-      } finally {
-        setCarregando(false);
       }
     }
 
