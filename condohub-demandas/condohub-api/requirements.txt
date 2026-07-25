@@ -5,6 +5,7 @@ click==8.4.2
 fastapi==0.139.0
 h11==0.16.0
 httptools==0.8.0
+httpx==0.28.1
 idna==3.18
 psycopg2-binary==2.9.12
 pydantic==2.13.4

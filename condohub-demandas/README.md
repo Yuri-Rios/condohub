@@ -88,6 +88,8 @@ No serviço FastAPI, configure:
 
 - `CLERK_ISSUER`: domínio da instância, por exemplo
   `https://example.clerk.accounts.dev`
+- `CLERK_SECRET_KEY`: chave usada pela API somente ao registrar com segurança
+  o nome e a foto do autor de chamados e mensagens
 - `CLERK_AUDIENCE`: opcional; use apenas se o claim `aud` tiver sido
   configurado no Clerk
 

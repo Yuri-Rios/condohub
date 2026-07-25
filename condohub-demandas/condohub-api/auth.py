@@ -20,6 +20,12 @@ PAPEIS_VALIDOS = {
 }
 PAPEIS_GESTORES = {"sindico", "subsindico", "funcionario", "admin"}
 PAPEIS_APROVADORES = {"sindico", "admin"}
+PAPEIS_COM_IDENTIDADE_DOS_CHAMADOS = {
+    "sindico",
+    "subsindico",
+    "funcionario",
+    "admin",
+}
 
 CLERK_ISSUER = os.getenv("CLERK_ISSUER", "").rstrip("/")
 CLERK_AUDIENCE = os.getenv("CLERK_AUDIENCE")
@@ -114,5 +120,16 @@ def exigir_aprovador(
         raise HTTPException(
             status_code=403,
             detail="Acesso restrito ao síndico e ao administrador.",
+        )
+    return usuario
+
+
+def exigir_admin(
+    usuario: Annotated[UsuarioAutenticado, Depends(usuario_atual)],
+) -> UsuarioAutenticado:
+    if "admin" not in usuario.papeis:
+        raise HTTPException(
+            status_code=403,
+            detail="Acesso restrito ao administrador.",
         )
     return usuario

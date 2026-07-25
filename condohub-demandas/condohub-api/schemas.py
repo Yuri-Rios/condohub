@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, EmailStr, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class OcorrenciaCriar(BaseModel):
@@ -13,10 +13,73 @@ class OcorrenciaResposta(BaseModel):
     titulo: str
     local: str
     descricao: str
+    status: str
     data_solicitacao: datetime
+    autor_nome: str | None = None
 
     class Config:
         from_attributes = True
+
+
+class MensagemCriar(BaseModel):
+    conteudo: str
+
+    @field_validator("conteudo")
+    @classmethod
+    def validar_conteudo(cls, valor: str):
+        valor = valor.strip()
+        if not valor:
+            raise ValueError("A mensagem não pode ficar vazia.")
+        if len(valor) > 4000:
+            raise ValueError("A mensagem deve ter no máximo 4.000 caracteres.")
+        return valor
+
+
+class ReacaoResposta(BaseModel):
+    emoji: str
+    quantidade: int
+    minha: bool
+
+
+class MensagemResposta(BaseModel):
+    id: int
+    ocorrencia_id: int
+    conteudo: str
+    autor_id: str
+    autor_nome: str
+    autor_avatar_url: str | None = None
+    autor_papeis: list[str]
+    criado_em: datetime
+    reacoes: list[ReacaoResposta] = Field(default_factory=list)
+
+
+class ReacaoAlternar(BaseModel):
+    emoji: str
+
+    @field_validator("emoji")
+    @classmethod
+    def validar_emoji(cls, valor: str):
+        if valor not in {"👍", "❤️", "😂", "👏"}:
+            raise ValueError("Reação inválida.")
+        return valor
+
+
+class OcorrenciaDetalhe(OcorrenciaResposta):
+    autor_avatar_url: str | None = None
+    pode_alterar_status: bool
+    pode_reabrir: bool
+    mensagens: list[MensagemResposta]
+
+
+class StatusOcorrenciaAlterar(BaseModel):
+    status: str
+
+    @field_validator("status")
+    @classmethod
+    def validar_status(cls, valor: str):
+        if valor not in {"novo", "em_andamento", "em_espera", "fechado"}:
+            raise ValueError("Status inválido.")
+        return valor
 
 
 class SolicitacaoAcessoCriar(BaseModel):
