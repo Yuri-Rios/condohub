@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from fastapi import Depends, FastAPI, HTTPException
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -70,6 +71,12 @@ app.add_middleware(
 @app.get("/")
 def inicio():
     return {"mensagem": "API de ocorrências funcionando"}
+
+
+@app.get("/health")
+def health(banco: Session = Depends(pegar_banco)):
+    banco.execute(text("SELECT 1"))
+    return {"status": "ok"}
 
 
 def _validar_data_reserva(inicio: datetime):

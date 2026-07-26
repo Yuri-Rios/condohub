@@ -5,7 +5,6 @@ import { UserButton, useUser } from "@clerk/nextjs";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import AquecerApi from "@/components/AquecerApi";
 import { useAcesso } from "@/src/hooks/useAcesso";
 
 type CondominioDisponivel = {
@@ -73,7 +72,6 @@ export default function Navbar() {
 
   return (
     <>
-    <AquecerApi />
     <header className="sticky top-3 z-20 mb-10 rounded-2xl border border-white/80 bg-white/90 p-2 shadow-[0_8px_32px_rgba(15,23,42,0.08)] backdrop-blur">
       <nav className="flex flex-wrap items-center gap-2">
         <Link href="/ocorrencias" className="mr-2 flex items-center gap-2 px-2 py-1">

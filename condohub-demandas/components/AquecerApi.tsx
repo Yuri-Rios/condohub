@@ -4,26 +4,23 @@ import { useEffect } from "react";
 
 export default function AquecerApi() {
   useEffect(() => {
-    const controlador = new AbortController();
-
     async function aguardarApi() {
-      for (let tentativa = 0; tentativa < 6; tentativa += 1) {
+      // O Render gratuito pode levar cerca de um minuto para iniciar. Este
+      // pedido não deve ser cancelado quando o Clerk troca a rota de login.
+      for (let tentativa = 0; tentativa < 18; tentativa += 1) {
         try {
           const resposta = await fetch("/api/health", {
             cache: "no-store",
-            signal: controlador.signal,
+            keepalive: true,
           });
           if (resposta.ok) return;
-        } catch {
-          if (controlador.signal.aborted) return;
-        }
+        } catch {}
 
         await new Promise((resolver) => setTimeout(resolver, 4000));
       }
     }
 
     void aguardarApi();
-    return () => controlador.abort();
   }, []);
 
   return null;

@@ -1,7 +1,5 @@
 import { SignUp } from "@clerk/nextjs";
 
-import AquecerApi from "@/components/AquecerApi";
-
 export default async function CadastroPage({
   searchParams,
 }: {
@@ -10,7 +8,6 @@ export default async function CadastroPage({
   const { condominio } = await searchParams;
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
-      <AquecerApi />
       <div className="absolute left-[-8rem] top-[-8rem] h-80 w-80 rounded-full bg-blue-200/50 blur-3xl" />
       <div className="absolute bottom-[-10rem] right-[-8rem] h-96 w-96 rounded-full bg-sky-200/40 blur-3xl" />
 
