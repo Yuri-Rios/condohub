@@ -1,6 +1,12 @@
 import { auth } from "@clerk/nextjs/server";
 
 const API_URL = process.env.API_URL;
+const STATUS_TRANSITORIOS = new Set([502, 503, 504]);
+const ATRASOS_TENTATIVAS_MS = [0, 1500, 3000, 5000];
+
+function aguardar(tempo: number) {
+  return new Promise((resolver) => setTimeout(resolver, tempo));
+}
 
 async function encaminhar(
   caminho: string,
@@ -14,29 +20,56 @@ async function encaminhar(
     );
   }
 
-  try {
-    const resposta = await fetch(`${API_URL}${caminho}`, {
-      ...init,
-      cache: "no-store",
-      headers: {
-        ...init?.headers,
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
+  const metodo = init?.method?.toUpperCase() ?? "GET";
+  const podeRepetir = metodo === "GET";
 
-    return new Response(resposta.body, {
-      status: resposta.status,
-      headers: {
-        "content-type":
-          resposta.headers.get("content-type") ?? "application/json",
-      },
-    });
-  } catch {
-    return Response.json(
-      { detail: "A API de ocorrências não respondeu." },
-      { status: 502 },
-    );
+  for (
+    let tentativa = 0;
+    tentativa < (podeRepetir ? ATRASOS_TENTATIVAS_MS.length : 1);
+    tentativa += 1
+  ) {
+    if (ATRASOS_TENTATIVAS_MS[tentativa] > 0) {
+      await aguardar(ATRASOS_TENTATIVAS_MS[tentativa]);
+    }
+
+    try {
+      const resposta = await fetch(`${API_URL}${caminho}`, {
+        ...init,
+        cache: "no-store",
+        headers: {
+          ...init?.headers,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      const deveRepetir =
+        podeRepetir &&
+        STATUS_TRANSITORIOS.has(resposta.status) &&
+        tentativa < ATRASOS_TENTATIVAS_MS.length - 1;
+      if (deveRepetir) {
+        await resposta.body?.cancel();
+        continue;
+      }
+
+      return new Response(resposta.body, {
+        status: resposta.status,
+        headers: {
+          "content-type":
+            resposta.headers.get("content-type") ?? "application/json",
+        },
+      });
+    } catch {
+      if (tentativa < ATRASOS_TENTATIVAS_MS.length - 1) continue;
+    }
   }
+
+  return Response.json(
+    {
+      detail:
+        "A API está iniciando e ainda não respondeu. Tente novamente em instantes.",
+    },
+    { status: 503 },
+  );
 }
 
 export async function chamarApi(caminho: string, init?: RequestInit) {

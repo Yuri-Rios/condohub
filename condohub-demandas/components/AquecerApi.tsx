@@ -4,10 +4,26 @@ import { useEffect } from "react";
 
 export default function AquecerApi() {
   useEffect(() => {
-    void fetch("/api/health", { cache: "no-store" }).catch(() => {
-      // O primeiro contato pode terminar antes de o serviço gratuito despertar.
-      // As chamadas autenticadas seguintes fazem uma nova tentativa normalmente.
-    });
+    const controlador = new AbortController();
+
+    async function aguardarApi() {
+      for (let tentativa = 0; tentativa < 6; tentativa += 1) {
+        try {
+          const resposta = await fetch("/api/health", {
+            cache: "no-store",
+            signal: controlador.signal,
+          });
+          if (resposta.ok) return;
+        } catch {
+          if (controlador.signal.aborted) return;
+        }
+
+        await new Promise((resolver) => setTimeout(resolver, 4000));
+      }
+    }
+
+    void aguardarApi();
+    return () => controlador.abort();
   }, []);
 
   return null;
