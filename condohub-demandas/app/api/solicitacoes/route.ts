@@ -5,9 +5,14 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const url = new URL(request.url);
+  const condominio = url.searchParams.get("condominio");
   return chamarApiPublica("/solicitacoes-acesso", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(condominio ? { "X-Condominio-Slug": condominio } : {}),
+    },
     body: await request.text(),
   });
 }

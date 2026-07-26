@@ -6,6 +6,14 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import AquecerApi from "@/components/AquecerApi";
+import { useAcesso } from "@/src/hooks/useAcesso";
+
+type CondominioDisponivel = {
+  id: number;
+  nome: string;
+  slug: string;
+  papeis: string[];
+};
 
 const nomesDosPapeis: Record<string, string> = {
   morador: "Morador(a)",
@@ -18,17 +26,23 @@ const nomesDosPapeis: Record<string, string> = {
 export default function Navbar() {
   const pathname = usePathname();
   const { user } = useUser();
-  const papeisNovos = user?.publicMetadata?.roles;
-  const papeis = Array.isArray(papeisNovos)
-    ? papeisNovos.map(String)
-    : user?.publicMetadata?.role
-      ? [String(user.publicMetadata.role)]
-      : [];
+  const acesso = useAcesso();
+  const papeis = acesso?.papeis ?? [];
   const podeAdministrar = papeis.some((papel) =>
     ["sindico", "subsindico", "admin"].includes(papel),
   );
   const podeAgendar = papeis.includes("morador");
+  const podeVerMoradores = papeis.some((papel) =>
+    ["sindico", "admin"].includes(papel),
+  );
   const [pendentes, setPendentes] = useState(0);
+  const [condominios, setCondominios] = useState<CondominioDisponivel[]>([]);
+
+  useEffect(() => {
+    void fetch("/api/condominios", { cache: "no-store" })
+      .then((resposta) => (resposta.ok ? resposta.json() : []))
+      .then(setCondominios);
+  }, []);
 
   useEffect(() => {
     if (!podeAdministrar) return;
@@ -47,6 +61,15 @@ export default function Navbar() {
     pathname === rota
       ? "bg-blue-600 text-white shadow-sm"
       : "text-slate-600 hover:bg-slate-100 hover:text-slate-950";
+
+  async function trocarCondominio(slug: string) {
+    const resposta = await fetch("/api/condominio-ativo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug }),
+    });
+    if (resposta.ok) window.location.reload();
+  }
 
   return (
     <>
@@ -97,9 +120,43 @@ export default function Navbar() {
               )}
             </Link>
           )}
+          {podeVerMoradores && (
+            <Link
+              href="/administracao/moradores"
+              className={`whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold ${ativo("/administracao/moradores")}`}
+            >
+              Moradores
+            </Link>
+          )}
+          {acesso?.admin_plataforma && (
+            <Link
+              href="/administracao/condominios"
+              className={`whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold ${ativo("/administracao/condominios")}`}
+            >
+              Condomínios
+            </Link>
+          )}
         </div>
 
         <div className="ml-auto flex items-center gap-3 pl-2">
+          {condominios.length > 1 ? (
+            <select
+              aria-label="Condomínio ativo"
+              value={acesso?.condominio.slug ?? ""}
+              onChange={(event) => void trocarCondominio(event.target.value)}
+              className="max-w-52 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-blue-500"
+            >
+              {condominios.map((condominio) => (
+                <option key={condominio.id} value={condominio.slug}>
+                  {condominio.nome}
+                </option>
+              ))}
+            </select>
+          ) : acesso?.condominio ? (
+            <span className="hidden max-w-44 truncate rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-600 lg:inline">
+              {acesso.condominio.nome}
+            </span>
+          ) : null}
           <div className="hidden text-right md:block">
             <p className="max-w-48 truncate text-sm font-semibold text-slate-800">
               {user?.fullName ?? "Minha conta"}

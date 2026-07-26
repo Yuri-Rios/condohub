@@ -38,10 +38,14 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## Autenticação e papéis
+## Autenticação, condomínios e papéis
 
 O frontend usa Clerk e a API FastAPI valida o mesmo token antes de ler ou
-alterar ocorrências. Os papéis aceitos são combináveis:
+alterar dados. O Clerk mantém apenas a identidade e a sessão. Condomínios,
+vínculos e papéis ficam no Postgres, pois uma pessoa pode ter funções diferentes
+em condomínios distintos.
+
+Os papéis aceitos por vínculo são combináveis:
 
 - `morador`
 - `sindico`
@@ -49,15 +53,22 @@ alterar ocorrências. Os papéis aceitos são combináveis:
 - `funcionario`
 - `admin`
 
-Um usuário sem papel configurado não tem acesso aos dados do condomínio.
+Um usuário sem vínculo ativo não tem acesso aos dados do condomínio. Toda
+requisição de negócio recebe `X-Condominio-Slug`; o servidor valida o vínculo
+antes de consultar chamados, solicitações ou reservas.
+
 Somente `sindico`, `subsindico`, `funcionario` e `admin` podem atualizar ocorrências. Somente
 `sindico` e `admin` podem decidir solicitações de acesso.
+
+`admin` é um papel do condomínio. Administradores da plataforma são mantidos
+separadamente em `administradores_plataforma`.
 
 ### Configurar o Clerk
 
 1. Crie uma aplicação no Clerk e copie `.env.example` para `.env.local`.
 2. Preencha `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` e `CLERK_SECRET_KEY`.
-3. Em **Sessions > Customize session token**, adicione o claim:
+3. Durante a migração dos usuários antigos, mantenha em
+   **Sessions > Customize session token** o claim:
 
 ```json
 {
@@ -65,17 +76,14 @@ Somente `sindico`, `subsindico`, `funcionario` e `admin` podem atualizar ocorrê
 }
 ```
 
-4. No usuário, configure **Public metadata** com os papéis necessários:
-
-```json
-{
-  "roles": ["morador", "sindico", "admin"]
-}
-```
-
+4. Não configure papéis globais para usuários novos. A aprovação da solicitação
+   cria o vínculo no condomínio correto.
 5. Em **Restrictions**, ative o modo **Restricted**. Novas pessoas solicitam
    acesso em `/solicitar-acesso`; após a aprovação, o sistema cria o convite e
    o Clerk envia o e-mail de cadastro.
+
+O condomínio inicial é `camila-barbosa`. Defina outro valor com
+`CONDOMINIO_PADRAO_SLUG` quando necessário.
 
 ### Configurar o Render
 
@@ -94,6 +102,8 @@ No serviço FastAPI, configure:
   configurado no Clerk
 
 Depois instale as dependências Python atualizadas de `condohub-api/requirements.txt`.
+As migrações multi-tenant `006` e `007` são idempotentes e executadas na
+inicialização da API, inclusive no Render.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

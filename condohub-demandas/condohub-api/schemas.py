@@ -3,6 +3,29 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
+class CondominioCriar(BaseModel):
+    nome: str
+    slug: str
+
+    @field_validator("nome")
+    @classmethod
+    def validar_nome(cls, valor: str):
+        valor = valor.strip()
+        if len(valor) < 3:
+            raise ValueError("Informe o nome do condomínio.")
+        return valor
+
+    @field_validator("slug")
+    @classmethod
+    def validar_slug(cls, valor: str):
+        import re
+
+        valor = valor.strip().lower()
+        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", valor):
+            raise ValueError("Use letras minúsculas, números e hífens no endereço.")
+        return valor
+
+
 class OcorrenciaCriar(BaseModel):
     titulo: str
     local: str
@@ -182,4 +205,11 @@ class SolicitacaoRecusar(BaseModel):
 
 
 class SolicitacaoConfirmarConvite(BaseModel):
-    invitation_id: str
+    invitation_id: str | None = None
+    clerk_user_id: str | None = None
+
+    @model_validator(mode="after")
+    def validar_destino(self):
+        if not self.invitation_id and not self.clerk_user_id:
+            raise ValueError("Informe o convite ou o usuário existente.")
+        return self

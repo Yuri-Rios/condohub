@@ -6,19 +6,25 @@ from sqlalchemy.orm import Session
 
 from fastapi.middleware.cors import CORSMiddleware
 
-from auth import (
-    PAPEIS_COM_IDENTIDADE_DOS_CHAMADOS,
-    UsuarioAutenticado,
+from auth import PAPEIS_COM_IDENTIDADE_DOS_CHAMADOS
+from tenant import (
+    ContextoCondominio,
+    condominio_publico,
+    contexto_condominio,
     exigir_admin,
+    exigir_admin_plataforma,
     exigir_aprovador,
     exigir_gestor,
     exigir_morador,
-    exigir_usuario_aprovado,
 )
 from clerk import buscar_perfil_clerk
-from database import Base, SessionLocal, engine
+from database import Base, engine, pegar_banco
+from migrations_runner import aplicar_migracoes_multitenant
 from models import (
+    AdministradorPlataforma,
+    Condominio,
     FUSO_BRASIL,
+    MembroCondominio,
     MensagemOcorrencia,
     Ocorrencia,
     ReacaoMensagem,
@@ -26,6 +32,7 @@ from models import (
     SolicitacaoAcesso,
 )
 from schemas import (
+    CondominioCriar,
     OcorrenciaCriar,
     OcorrenciaDetalhe,
     OcorrenciaResposta,
@@ -43,6 +50,7 @@ from schemas import (
 )
 
 Base.metadata.create_all(bind=engine)
+aplicar_migracoes_multitenant(engine)
 
 app = FastAPI()
 
@@ -57,15 +65,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-def pegar_banco():
-    banco = SessionLocal()
-
-    try:
-        yield banco
-    finally:
-        banco.close()
 
 
 @app.get("/")
@@ -90,7 +89,7 @@ def _validar_data_reserva(inicio: datetime):
 
 def _reserva_resposta(
     reserva: ReservaAmbiente,
-    usuario: UsuarioAutenticado,
+    usuario: ContextoCondominio,
 ):
     minha = reserva.morador_id == usuario.id
     return {
@@ -107,7 +106,7 @@ def listar_reservas(
     inicio: datetime,
     fim: datetime,
     banco: Session = Depends(pegar_banco),
-    usuario: UsuarioAutenticado = Depends(exigir_morador),
+    usuario: ContextoCondominio = Depends(exigir_morador),
 ):
     if inicio.tzinfo is None or fim.tzinfo is None or fim <= inicio:
         raise HTTPException(status_code=422, detail="Período inválido.")
@@ -122,6 +121,7 @@ def listar_reservas(
         .filter(
             ReservaAmbiente.inicio >= inicio,
             ReservaAmbiente.inicio < fim,
+            ReservaAmbiente.condominio_id == usuario.condominio_id,
         )
         .order_by(ReservaAmbiente.inicio.asc())
         .all()
@@ -133,11 +133,12 @@ def listar_reservas(
 def criar_reserva(
     dados: ReservaCriar,
     banco: Session = Depends(pegar_banco),
-    usuario: UsuarioAutenticado = Depends(exigir_morador),
+    usuario: ContextoCondominio = Depends(exigir_morador),
 ):
     _validar_data_reserva(dados.inicio)
     perfil = buscar_perfil_clerk(usuario.id)
     reserva = ReservaAmbiente(
+        condominio_id=usuario.condominio_id,
         ambiente=dados.ambiente,
         inicio=dados.inicio,
         fim=dados.inicio + timedelta(hours=2),
@@ -162,9 +163,16 @@ def reagendar_reserva(
     reserva_id: int,
     dados: ReservaReagendar,
     banco: Session = Depends(pegar_banco),
-    usuario: UsuarioAutenticado = Depends(exigir_morador),
+    usuario: ContextoCondominio = Depends(exigir_morador),
 ):
-    reserva = banco.get(ReservaAmbiente, reserva_id)
+    reserva = (
+        banco.query(ReservaAmbiente)
+        .filter(
+            ReservaAmbiente.id == reserva_id,
+            ReservaAmbiente.condominio_id == usuario.condominio_id,
+        )
+        .first()
+    )
     if not reserva or reserva.morador_id != usuario.id:
         raise HTTPException(status_code=404, detail="Reserva não encontrada.")
 
@@ -187,9 +195,16 @@ def reagendar_reserva(
 def cancelar_reserva(
     reserva_id: int,
     banco: Session = Depends(pegar_banco),
-    usuario: UsuarioAutenticado = Depends(exigir_morador),
+    usuario: ContextoCondominio = Depends(exigir_morador),
 ):
-    reserva = banco.get(ReservaAmbiente, reserva_id)
+    reserva = (
+        banco.query(ReservaAmbiente)
+        .filter(
+            ReservaAmbiente.id == reserva_id,
+            ReservaAmbiente.condominio_id == usuario.condominio_id,
+        )
+        .first()
+    )
     if not reserva or reserva.morador_id != usuario.id:
         raise HTTPException(status_code=404, detail="Reserva não encontrada.")
 
@@ -200,9 +215,14 @@ def cancelar_reserva(
 @app.get("/ocorrencias", response_model=list[OcorrenciaResposta])
 def listar_ocorrencias(
     banco: Session = Depends(pegar_banco),
-    usuario: UsuarioAutenticado = Depends(exigir_usuario_aprovado),
+    usuario: ContextoCondominio = Depends(contexto_condominio),
 ):
-    ocorrencias = banco.query(Ocorrencia).order_by(Ocorrencia.id.desc()).all()
+    ocorrencias = (
+        banco.query(Ocorrencia)
+        .filter(Ocorrencia.condominio_id == usuario.condominio_id)
+        .order_by(Ocorrencia.id.desc())
+        .all()
+    )
     pode_ver_autor = not usuario.papeis.isdisjoint(
         PAPEIS_COM_IDENTIDADE_DOS_CHAMADOS
     )
@@ -224,10 +244,11 @@ def listar_ocorrencias(
 def criar_ocorrencia(
     dados: OcorrenciaCriar,
     banco: Session = Depends(pegar_banco),
-    usuario: UsuarioAutenticado = Depends(exigir_usuario_aprovado),
+    usuario: ContextoCondominio = Depends(contexto_condominio),
 ):
     perfil = buscar_perfil_clerk(usuario.id)
     nova_ocorrencia = Ocorrencia(
+        condominio_id=usuario.condominio_id,
         titulo=dados.titulo,
         local=dados.local,
         descricao=dados.descricao,
@@ -285,9 +306,16 @@ def _mensagem_resposta(
 def obter_thread(
     ocorrencia_id: int,
     banco: Session = Depends(pegar_banco),
-    usuario: UsuarioAutenticado = Depends(exigir_usuario_aprovado),
+    usuario: ContextoCondominio = Depends(contexto_condominio),
 ):
-    ocorrencia = banco.get(Ocorrencia, ocorrencia_id)
+    ocorrencia = (
+        banco.query(Ocorrencia)
+        .filter(
+            Ocorrencia.id == ocorrencia_id,
+            Ocorrencia.condominio_id == usuario.condominio_id,
+        )
+        .first()
+    )
     if not ocorrencia:
         raise HTTPException(status_code=404, detail="Chamado não encontrado.")
 
@@ -351,9 +379,17 @@ def criar_mensagem(
     ocorrencia_id: int,
     dados: MensagemCriar,
     banco: Session = Depends(pegar_banco),
-    usuario: UsuarioAutenticado = Depends(exigir_usuario_aprovado),
+    usuario: ContextoCondominio = Depends(contexto_condominio),
 ):
-    if not banco.get(Ocorrencia, ocorrencia_id):
+    ocorrencia = (
+        banco.query(Ocorrencia)
+        .filter(
+            Ocorrencia.id == ocorrencia_id,
+            Ocorrencia.condominio_id == usuario.condominio_id,
+        )
+        .first()
+    )
+    if not ocorrencia:
         raise HTTPException(status_code=404, detail="Chamado não encontrado.")
 
     perfil = buscar_perfil_clerk(usuario.id)
@@ -376,9 +412,16 @@ def alterar_status_ocorrencia(
     ocorrencia_id: int,
     dados: StatusOcorrenciaAlterar,
     banco: Session = Depends(pegar_banco),
-    usuario: UsuarioAutenticado = Depends(exigir_usuario_aprovado),
+    usuario: ContextoCondominio = Depends(contexto_condominio),
 ):
-    ocorrencia = banco.get(Ocorrencia, ocorrencia_id)
+    ocorrencia = (
+        banco.query(Ocorrencia)
+        .filter(
+            Ocorrencia.id == ocorrencia_id,
+            Ocorrencia.condominio_id == usuario.condominio_id,
+        )
+        .first()
+    )
     if not ocorrencia:
         raise HTTPException(status_code=404, detail="Chamado não encontrado.")
 
@@ -422,9 +465,18 @@ def alternar_reacao(
     mensagem_id: int,
     dados: ReacaoAlternar,
     banco: Session = Depends(pegar_banco),
-    usuario: UsuarioAutenticado = Depends(exigir_usuario_aprovado),
+    usuario: ContextoCondominio = Depends(contexto_condominio),
 ):
-    if not banco.get(MensagemOcorrencia, mensagem_id):
+    mensagem = (
+        banco.query(MensagemOcorrencia)
+        .join(Ocorrencia, Ocorrencia.id == MensagemOcorrencia.ocorrencia_id)
+        .filter(
+            MensagemOcorrencia.id == mensagem_id,
+            Ocorrencia.condominio_id == usuario.condominio_id,
+        )
+        .first()
+    )
+    if not mensagem:
         raise HTTPException(status_code=404, detail="Mensagem não encontrada.")
 
     existente = (
@@ -465,9 +517,16 @@ def atualizar_ocorrencia(
     ocorrencia_id: int,
     dados: OcorrenciaCriar,
     banco: Session = Depends(pegar_banco),
-    _usuario: UsuarioAutenticado = Depends(exigir_gestor),
+    usuario: ContextoCondominio = Depends(exigir_gestor),
 ):
-    ocorrencia = banco.query(Ocorrencia).filter(Ocorrencia.id == ocorrencia_id).first()
+    ocorrencia = (
+        banco.query(Ocorrencia)
+        .filter(
+            Ocorrencia.id == ocorrencia_id,
+            Ocorrencia.condominio_id == usuario.condominio_id,
+        )
+        .first()
+    )
 
     if ocorrencia is None:
         return {"erro": "Ocorrência não encontrada"}
@@ -486,9 +545,16 @@ def atualizar_ocorrencia(
 def excluir_ocorrencia(
     ocorrencia_id: int,
     banco: Session = Depends(pegar_banco),
-    _usuario: UsuarioAutenticado = Depends(exigir_admin),
+    usuario: ContextoCondominio = Depends(exigir_admin),
 ):
-    ocorrencia = banco.get(Ocorrencia, ocorrencia_id)
+    ocorrencia = (
+        banco.query(Ocorrencia)
+        .filter(
+            Ocorrencia.id == ocorrencia_id,
+            Ocorrencia.condominio_id == usuario.condominio_id,
+        )
+        .first()
+    )
     if not ocorrencia:
         raise HTTPException(status_code=404, detail="Chamado não encontrado.")
 
@@ -497,19 +563,166 @@ def excluir_ocorrencia(
 
 
 @app.get("/me")
-def meus_dados(usuario: UsuarioAutenticado = Depends(exigir_usuario_aprovado)):
-    return {"id": usuario.id, "papeis": sorted(usuario.papeis)}
+def meus_dados(
+    banco: Session = Depends(pegar_banco),
+    usuario: ContextoCondominio = Depends(contexto_condominio),
+):
+    admin_plataforma = (
+        banco.query(AdministradorPlataforma)
+        .filter(AdministradorPlataforma.clerk_user_id == usuario.id)
+        .first()
+        is not None
+    )
+    return {
+        "id": usuario.id,
+        "papeis": sorted(usuario.papeis),
+        "admin_plataforma": admin_plataforma,
+        "condominio": {
+            "id": usuario.condominio_id,
+            "slug": usuario.condominio_slug,
+            "nome": usuario.condominio_nome,
+        },
+    }
+
+
+@app.get("/condominios")
+def listar_meus_condominios(
+    banco: Session = Depends(pegar_banco),
+    contexto: ContextoCondominio = Depends(contexto_condominio),
+):
+    membros = (
+        banco.query(MembroCondominio, Condominio)
+        .join(Condominio, Condominio.id == MembroCondominio.condominio_id)
+        .filter(
+            MembroCondominio.clerk_user_id == contexto.id,
+            MembroCondominio.status == "ativo",
+            Condominio.ativo == 1,
+        )
+        .order_by(Condominio.nome.asc())
+        .all()
+    )
+    return [
+        {
+            "id": condominio.id,
+            "nome": condominio.nome,
+            "slug": condominio.slug,
+            "papeis": sorted(
+                papel
+                for papel in membro.papeis.split(",")
+                if papel
+            ),
+        }
+        for membro, condominio in membros
+    ]
+
+
+@app.get("/moradores")
+def listar_moradores(
+    banco: Session = Depends(pegar_banco),
+    usuario: ContextoCondominio = Depends(exigir_aprovador),
+):
+    membros = (
+        banco.query(MembroCondominio)
+        .filter(MembroCondominio.condominio_id == usuario.condominio_id)
+        .order_by(
+            MembroCondominio.bloco.asc(),
+            MembroCondominio.apartamento.asc(),
+            MembroCondominio.nome.asc(),
+        )
+        .all()
+    )
+    return [
+        {
+            "id": membro.id,
+            "nome": membro.nome,
+            "avatar_url": membro.avatar_url,
+            "bloco": membro.bloco,
+            "apartamento": membro.apartamento,
+            "papeis": sorted(
+                papel for papel in membro.papeis.split(",") if papel
+            ),
+            "status": membro.status,
+            "criado_em": membro.criado_em,
+        }
+        for membro in membros
+        if "morador" in membro.papeis.split(",")
+    ]
+
+
+@app.get("/condominio-publico")
+def obter_condominio_publico(
+    condominio: Condominio = Depends(condominio_publico),
+):
+    return {
+        "id": condominio.id,
+        "nome": condominio.nome,
+        "slug": condominio.slug,
+    }
+
+
+@app.get("/admin/condominios")
+def listar_condominios_da_plataforma(
+    banco: Session = Depends(pegar_banco),
+    _usuario: UsuarioAutenticado = Depends(exigir_admin_plataforma),
+):
+    return [
+        {
+            "id": item.id,
+            "nome": item.nome,
+            "slug": item.slug,
+            "ativo": item.ativo == 1,
+        }
+        for item in banco.query(Condominio).order_by(Condominio.nome.asc()).all()
+    ]
+
+
+@app.post("/admin/condominios", status_code=201)
+def criar_condominio(
+    dados: CondominioCriar,
+    banco: Session = Depends(pegar_banco),
+    usuario: UsuarioAutenticado = Depends(exigir_admin_plataforma),
+):
+    if banco.query(Condominio).filter(Condominio.slug == dados.slug).first():
+        raise HTTPException(
+            status_code=409,
+            detail="Já existe um condomínio com este endereço.",
+        )
+
+    perfil = buscar_perfil_clerk(usuario.id)
+    condominio = Condominio(nome=dados.nome, slug=dados.slug, ativo=1)
+    banco.add(condominio)
+    banco.flush()
+    banco.add(
+        MembroCondominio(
+            condominio_id=condominio.id,
+            clerk_user_id=usuario.id,
+            nome=perfil.nome,
+            avatar_url=perfil.avatar_url,
+            papeis="admin,sindico",
+            status="ativo",
+        )
+    )
+    banco.commit()
+    banco.refresh(condominio)
+    return {
+        "id": condominio.id,
+        "nome": condominio.nome,
+        "slug": condominio.slug,
+        "ativo": True,
+    }
 
 
 @app.post("/solicitacoes-acesso", response_model=SolicitacaoAcessoResposta)
 def solicitar_acesso(
     dados: SolicitacaoAcessoCriar,
     banco: Session = Depends(pegar_banco),
+    condominio: Condominio = Depends(condominio_publico),
 ):
     existente = (
         banco.query(SolicitacaoAcesso)
         .filter(
             SolicitacaoAcesso.email == str(dados.email).lower(),
+            SolicitacaoAcesso.condominio_id == condominio.id,
             SolicitacaoAcesso.status.in_(["pendente", "aprovada"]),
         )
         .first()
@@ -521,6 +734,7 @@ def solicitar_acesso(
         )
 
     solicitacao = SolicitacaoAcesso(
+        condominio_id=condominio.id,
         nome=dados.nome,
         email=str(dados.email).lower(),
         tipo=dados.tipo,
@@ -537,10 +751,11 @@ def solicitar_acesso(
 @app.get("/solicitacoes-acesso", response_model=list[SolicitacaoAcessoResposta])
 def listar_solicitacoes(
     banco: Session = Depends(pegar_banco),
-    _usuario: UsuarioAutenticado = Depends(exigir_aprovador),
+    usuario: ContextoCondominio = Depends(exigir_aprovador),
 ):
     return (
         banco.query(SolicitacaoAcesso)
+        .filter(SolicitacaoAcesso.condominio_id == usuario.condominio_id)
         .order_by(SolicitacaoAcesso.criado_em.desc())
         .all()
     )
@@ -553,9 +768,16 @@ def listar_solicitacoes(
 def obter_solicitacao(
     solicitacao_id: int,
     banco: Session = Depends(pegar_banco),
-    _usuario: UsuarioAutenticado = Depends(exigir_aprovador),
+    usuario: ContextoCondominio = Depends(exigir_aprovador),
 ):
-    solicitacao = banco.get(SolicitacaoAcesso, solicitacao_id)
+    solicitacao = (
+        banco.query(SolicitacaoAcesso)
+        .filter(
+            SolicitacaoAcesso.id == solicitacao_id,
+            SolicitacaoAcesso.condominio_id == usuario.condominio_id,
+        )
+        .first()
+    )
     if not solicitacao:
         raise HTTPException(status_code=404, detail="Solicitação não encontrada.")
     return solicitacao
@@ -569,9 +791,16 @@ def confirmar_solicitacao(
     solicitacao_id: int,
     dados: SolicitacaoConfirmarConvite,
     banco: Session = Depends(pegar_banco),
-    usuario: UsuarioAutenticado = Depends(exigir_aprovador),
+    usuario: ContextoCondominio = Depends(exigir_aprovador),
 ):
-    solicitacao = banco.get(SolicitacaoAcesso, solicitacao_id)
+    solicitacao = (
+        banco.query(SolicitacaoAcesso)
+        .filter(
+            SolicitacaoAcesso.id == solicitacao_id,
+            SolicitacaoAcesso.condominio_id == usuario.condominio_id,
+        )
+        .first()
+    )
     if not solicitacao:
         raise HTTPException(status_code=404, detail="Solicitação não encontrada.")
     if solicitacao.status != "pendente":
@@ -581,6 +810,40 @@ def confirmar_solicitacao(
     solicitacao.decidido_em = datetime.now(FUSO_BRASIL)
     solicitacao.decidido_por = usuario.id
     solicitacao.clerk_invitation_id = dados.invitation_id
+    if dados.clerk_user_id:
+        membro = (
+            banco.query(MembroCondominio)
+            .filter(
+                MembroCondominio.condominio_id == usuario.condominio_id,
+                MembroCondominio.clerk_user_id == dados.clerk_user_id,
+            )
+            .first()
+        )
+        perfil = buscar_perfil_clerk(dados.clerk_user_id)
+        if membro:
+            papeis = set(membro.papeis.split(","))
+            papeis.add(solicitacao.tipo)
+            membro.papeis = ",".join(sorted(papel for papel in papeis if papel))
+            membro.status = "ativo"
+            membro.nome = perfil.nome
+            membro.avatar_url = perfil.avatar_url
+            if solicitacao.bloco:
+                membro.bloco = solicitacao.bloco
+            if solicitacao.apartamento:
+                membro.apartamento = solicitacao.apartamento
+        else:
+            banco.add(
+                MembroCondominio(
+                    condominio_id=usuario.condominio_id,
+                    clerk_user_id=dados.clerk_user_id,
+                    nome=perfil.nome,
+                    avatar_url=perfil.avatar_url,
+                    papeis=solicitacao.tipo,
+                    bloco=solicitacao.bloco,
+                    apartamento=solicitacao.apartamento,
+                    status="ativo",
+                )
+            )
     banco.commit()
     banco.refresh(solicitacao)
     return solicitacao
@@ -594,9 +857,16 @@ def recusar_solicitacao(
     solicitacao_id: int,
     dados: SolicitacaoRecusar,
     banco: Session = Depends(pegar_banco),
-    usuario: UsuarioAutenticado = Depends(exigir_aprovador),
+    usuario: ContextoCondominio = Depends(exigir_aprovador),
 ):
-    solicitacao = banco.get(SolicitacaoAcesso, solicitacao_id)
+    solicitacao = (
+        banco.query(SolicitacaoAcesso)
+        .filter(
+            SolicitacaoAcesso.id == solicitacao_id,
+            SolicitacaoAcesso.condominio_id == usuario.condominio_id,
+        )
+        .first()
+    )
     if not solicitacao:
         raise HTTPException(status_code=404, detail="Solicitação não encontrada.")
     if solicitacao.status != "pendente":

@@ -1,0 +1,20 @@
+from pathlib import Path
+
+from sqlalchemy import text
+from sqlalchemy.engine import Engine
+
+MIGRACOES_MULTITENANT = (
+    "006_multicondominio.sql",
+    "007_admin_plataforma.sql",
+    "008_avatar_membros.sql",
+)
+
+
+def aplicar_migracoes_multitenant(engine: Engine):
+    diretorio = Path(__file__).resolve().parent / "migrations"
+    with engine.begin() as conexao:
+        for nome in MIGRACOES_MULTITENANT:
+            conteudo = (diretorio / nome).read_text(encoding="utf-8")
+            for comando in conteudo.split(";"):
+                if comando.strip():
+                    conexao.execute(text(comando))

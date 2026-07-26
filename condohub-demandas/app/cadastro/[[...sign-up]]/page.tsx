@@ -2,7 +2,12 @@ import { SignUp } from "@clerk/nextjs";
 
 import AquecerApi from "@/components/AquecerApi";
 
-export default function CadastroPage() {
+export default async function CadastroPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ condominio?: string }>;
+}) {
+  const { condominio } = await searchParams;
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
       <AquecerApi />
@@ -28,7 +33,11 @@ export default function CadastroPage() {
           path="/cadastro"
           routing="path"
           signInUrl="/entrar"
-          forceRedirectUrl="/ocorrencias"
+          forceRedirectUrl={
+            condominio
+              ? `/c/${encodeURIComponent(condominio)}`
+              : "/ocorrencias"
+          }
           appearance={{
             variables: {
               colorPrimary: "#2563eb",

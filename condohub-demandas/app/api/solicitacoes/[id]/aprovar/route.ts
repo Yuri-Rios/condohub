@@ -1,4 +1,5 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 
 import { chamarApi } from "@/src/lib/backend";
 
@@ -28,11 +29,33 @@ export async function POST(
   }
 
   const client = await clerkClient();
+  const usuariosExistentes = await client.users.getUserList({
+    emailAddress: [solicitacao.email],
+    limit: 1,
+  });
+  const usuarioExistente = usuariosExistentes.data[0];
+  if (usuarioExistente) {
+    return chamarApi(
+      `/solicitacoes-acesso/${encodeURIComponent(id)}/confirmar`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clerk_user_id: usuarioExistente.id }),
+      },
+    );
+  }
+
+  const armazenados = await cookies();
+  const condominioSlug =
+    armazenados.get("condohub_condominio")?.value ?? "camila-barbosa";
+  const cadastroUrl = new URL("/cadastro", request.url);
+  cadastroUrl.searchParams.set("condominio", condominioSlug);
   const convite = await client.invitations.createInvitation({
     emailAddress: solicitacao.email,
-    redirectUrl: new URL("/cadastro", request.url).toString(),
+    redirectUrl: cadastroUrl.toString(),
     publicMetadata: {
-      roles: [solicitacao.tipo],
+      condominio: condominioSlug,
+      papelSolicitado: solicitacao.tipo,
       nome: solicitacao.nome,
       bloco: solicitacao.bloco,
       apartamento: solicitacao.apartamento,

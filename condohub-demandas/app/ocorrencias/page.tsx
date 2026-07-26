@@ -1,11 +1,11 @@
 "use client";
 
-import { useUser } from "@clerk/nextjs";
 import { Fragment, useEffect, useState } from "react";
 
 import Navbar from "@/components/Navbar";
 import ThreadChamado from "@/components/ThreadChamado";
 import Titulo from "@/components/Titulo";
+import { useAcesso } from "@/src/hooks/useAcesso";
 
 type Ocorrencia = {
   id: number;
@@ -62,11 +62,8 @@ export default function OcorrenciasPage() {
   const [carregando, setCarregando] = useState(true);
   const [abertoId, setAbertoId] = useState<number | null>(null);
   const [excluindoId, setExcluindoId] = useState<number | null>(null);
-  const { user } = useUser();
-  const papeis = Array.isArray(user?.publicMetadata?.roles)
-    ? user.publicMetadata.roles.map(String)
-    : [];
-  const podeExcluir = papeis.includes("admin");
+  const acesso = useAcesso();
+  const podeExcluir = acesso?.papeis.includes("admin") ?? false;
 
   async function excluirOcorrencia(id: number, titulo: string) {
     const confirmou = window.confirm(

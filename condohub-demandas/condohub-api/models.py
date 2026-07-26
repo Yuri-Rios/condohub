@@ -11,9 +11,61 @@ FUSO_BRASIL = ZoneInfo("America/Fortaleza")
 def agora_no_brasil():
     return datetime.now(FUSO_BRASIL)
 
+
+class Condominio(Base):
+    __tablename__ = "condominios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String(160), nullable=False)
+    slug = Column(String(100), nullable=False, unique=True, index=True)
+    ativo = Column(Integer, nullable=False, default=1)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
+class MembroCondominio(Base):
+    __tablename__ = "membros_condominio"
+    __table_args__ = (
+        UniqueConstraint(
+            "condominio_id",
+            "clerk_user_id",
+            name="uq_membro_condominio_usuario",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(
+        Integer,
+        ForeignKey("condominios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    clerk_user_id = Column(String(255), nullable=False, index=True)
+    nome = Column(String(160), nullable=False)
+    avatar_url = Column(Text, nullable=True)
+    papeis = Column(String(255), nullable=False)
+    bloco = Column(String(40), nullable=True)
+    apartamento = Column(String(40), nullable=True)
+    status = Column(String(20), nullable=False, default="ativo", index=True)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
+class AdministradorPlataforma(Base):
+    __tablename__ = "administradores_plataforma"
+
+    id = Column(Integer, primary_key=True, index=True)
+    clerk_user_id = Column(String(255), nullable=False, unique=True, index=True)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
 class Ocorrencia(Base):
     __tablename__ = "ocorrencias"
     id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(
+        Integer,
+        ForeignKey("condominios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     titulo = Column(String)
     local = Column(String)
     descricao = Column(String)
@@ -73,13 +125,20 @@ class ReservaAmbiente(Base):
     __tablename__ = "reservas_ambientes"
     __table_args__ = (
         UniqueConstraint(
+            "condominio_id",
             "ambiente",
             "inicio",
-            name="uq_reserva_ambiente_inicio",
+            name="uq_reserva_condominio_ambiente_inicio",
         ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(
+        Integer,
+        ForeignKey("condominios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     ambiente = Column(String(30), nullable=False, index=True)
     inicio = Column(DateTime(timezone=True), nullable=False, index=True)
     fim = Column(DateTime(timezone=True), nullable=False)
@@ -92,6 +151,12 @@ class SolicitacaoAcesso(Base):
     __tablename__ = "solicitacoes_acesso"
 
     id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(
+        Integer,
+        ForeignKey("condominios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     nome = Column(String(160), nullable=False)
     email = Column(String(320), nullable=False, index=True)
     tipo = Column(String(20), nullable=False)

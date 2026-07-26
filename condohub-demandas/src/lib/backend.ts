@@ -1,8 +1,11 @@
 import { auth } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 
 const API_URL = process.env.API_URL;
 const STATUS_TRANSITORIOS = new Set([502, 503, 504]);
 const ATRASOS_TENTATIVAS_MS = [0, 1500, 3000, 5000];
+const CONDOMINIO_PADRAO =
+  process.env.CONDOMINIO_PADRAO_SLUG ?? "camila-barbosa";
 
 function aguardar(tempo: number) {
   return new Promise((resolver) => setTimeout(resolver, tempo));
@@ -22,6 +25,15 @@ async function encaminhar(
 
   const metodo = init?.method?.toUpperCase() ?? "GET";
   const podeRepetir = metodo === "GET";
+  const cabecalhos = new Headers(init?.headers);
+  if (token) cabecalhos.set("Authorization", `Bearer ${token}`);
+  if (!cabecalhos.has("X-Condominio-Slug")) {
+    const armazenados = await cookies();
+    cabecalhos.set(
+      "X-Condominio-Slug",
+      armazenados.get("condohub_condominio")?.value ?? CONDOMINIO_PADRAO,
+    );
+  }
 
   for (
     let tentativa = 0;
@@ -36,10 +48,7 @@ async function encaminhar(
       const resposta = await fetch(`${API_URL}${caminho}`, {
         ...init,
         cache: "no-store",
-        headers: {
-          ...init?.headers,
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: cabecalhos,
       });
 
       const deveRepetir =

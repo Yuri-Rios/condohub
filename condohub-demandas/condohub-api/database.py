@@ -31,3 +31,11 @@ SessionLocal = sessionmaker(
 )
 
 Base = declarative_base()
+
+
+def pegar_banco():
+    banco = SessionLocal()
+    try:
+        yield banco
+    finally:
+        banco.close()

@@ -1,17 +1,68 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+
+type CondominioPublico = {
+  id: number;
+  nome: string;
+  slug: string;
+};
 
 export default function SolicitarAcessoPage() {
+  const [condominioAtual, setCondominioAtual] =
+    useState<CondominioPublico | null>(null);
+  const [carregandoCondominio, setCarregandoCondominio] = useState(true);
+  const [erroCondominio, setErroCondominio] = useState("");
   const [tipo, setTipo] = useState("morador");
   const [apartamento, setApartamento] = useState("");
   const [erroApartamento, setErroApartamento] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [mensagem, setMensagem] = useState("");
 
+  useEffect(() => {
+    let ativo = true;
+    async function carregarCondominio() {
+      const parametros = new URLSearchParams(window.location.search);
+      const slug = parametros.get("condominio") ?? "camila-barbosa";
+      const resposta = await fetch(
+        `/api/condominio-publico?condominio=${encodeURIComponent(slug)}`,
+        { cache: "no-store" },
+      );
+      if (!ativo) return;
+      if (!resposta.ok) {
+        setErroCondominio(
+          resposta.status === 404
+            ? "O condomínio informado não foi encontrado."
+            : "Não foi possível identificar o condomínio.",
+        );
+        setCarregandoCondominio(false);
+        return;
+      }
+      const dados = (await resposta.json()) as CondominioPublico;
+      setCondominioAtual(dados);
+      setCarregandoCondominio(false);
+      if (!parametros.has("condominio")) {
+        parametros.set("condominio", dados.slug);
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}?${parametros.toString()}`,
+        );
+      }
+    }
+    void carregarCondominio();
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
   async function enviar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!condominioAtual) {
+      setMensagem("Não foi possível identificar o condomínio.");
+      return;
+    }
     const formulario = event.currentTarget;
     setEnviando(true);
     setMensagem("");
@@ -23,7 +74,8 @@ export default function SolicitarAcessoPage() {
       return;
     }
 
-    const resposta = await fetch("/api/solicitacoes", {
+    const destino = `/api/solicitacoes?condominio=${encodeURIComponent(condominioAtual.slug)}`;
+    const resposta = await fetch(destino, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -74,13 +126,34 @@ export default function SolicitarAcessoPage() {
           <h1 className="mt-4 text-4xl font-bold tracking-tight text-slate-950">
             Solicite seu acesso
           </h1>
+          {carregandoCondominio ? (
+            <div className="mt-4 h-12 animate-pulse rounded-xl bg-slate-200/70" />
+          ) : condominioAtual ? (
+            <div className="mt-4 inline-flex items-center gap-3 rounded-2xl border border-blue-200 bg-white px-4 py-3 shadow-sm">
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-600 text-xs font-black text-white">
+                CH
+              </span>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                  Condomínio
+                </p>
+                <p className="font-bold text-slate-950">
+                  {condominioAtual.nome}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 font-medium text-rose-700">
+              {erroCondominio}
+            </p>
+          )}
           <p className="mt-3 max-w-xl text-base leading-7 text-slate-600">
             Preencha seus dados. A administração confere a solicitação e, após
             a aprovação, você recebe o convite por e-mail.
           </p>
         </div>
 
-        <form onSubmit={enviar} className="mt-8 space-y-5 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_16px_50px_rgba(15,23,42,0.08)] sm:p-8">
+        <form onSubmit={enviar} className={`mt-8 space-y-5 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_16px_50px_rgba(15,23,42,0.08)] sm:p-8 ${!condominioAtual ? "pointer-events-none opacity-50" : ""}`}>
           <label className="block">
             <span className="text-sm font-semibold text-slate-700">Nome completo</span>
             <input name="nome" required placeholder="Como aparece no documento" className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" />
@@ -153,7 +226,7 @@ export default function SolicitarAcessoPage() {
           {mensagem && <p className="rounded-xl bg-blue-50 p-4 text-sm font-medium text-blue-800">{mensagem}</p>}
 
           <button
-            disabled={enviando}
+            disabled={enviando || !condominioAtual}
             className="w-full rounded-xl bg-blue-600 px-5 py-3.5 font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {enviando ? "Enviando..." : "Enviar solicitação"}
