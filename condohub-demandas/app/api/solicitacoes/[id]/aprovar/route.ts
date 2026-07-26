@@ -13,7 +13,7 @@ type Solicitacao = {
 };
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   await auth.protect();
@@ -30,6 +30,7 @@ export async function POST(
   const client = await clerkClient();
   const convite = await client.invitations.createInvitation({
     emailAddress: solicitacao.email,
+    redirectUrl: new URL("/cadastro", request.url).toString(),
     publicMetadata: {
       roles: [solicitacao.tipo],
       nome: solicitacao.nome,

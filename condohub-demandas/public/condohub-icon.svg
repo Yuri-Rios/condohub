@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">CondoHub</title>
+  <defs>
+    <linearGradient id="condohub-gradient" x1="48" y1="32" x2="464" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#0EA5E9"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="144" fill="url(#condohub-gradient)"/>
+  <text x="256" y="310" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="184" font-weight="800" text-anchor="middle">CH</text>
+</svg>
