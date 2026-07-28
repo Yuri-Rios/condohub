@@ -1,8 +1,10 @@
 "use client";
 
-const MAXIMO_TENTATIVAS = 30;
+const MAXIMO_TENTATIVAS = 4;
 const INTERVALO_TENTATIVAS_MS = 2_000;
-const LIMITE_REQUISICAO_MS = 8_000;
+// Maior que o limite do proxy Next para que o navegador não cancele a
+// requisição que está efetivamente despertando o serviço no Render.
+const LIMITE_REQUISICAO_MS = 100_000;
 
 let inicializacaoEmAndamento: Promise<boolean> | null = null;
 
