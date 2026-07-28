@@ -1,7 +1,12 @@
+import asyncio
+import logging
+import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from enum import Enum
 
-from fastapi import Depends, FastAPI, HTTPException
-from sqlalchemy import text
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -50,10 +55,61 @@ from schemas import (
     SolicitacaoRecusar,
 )
 
-Base.metadata.create_all(bind=engine)
-aplicar_migracoes_multitenant(engine)
+logger = logging.getLogger(__name__)
 
-app = FastAPI()
+
+class EstadoInicializacao(str, Enum):
+    INICIANDO = "iniciando"
+    PRONTO = "pronto"
+    ERRO = "erro"
+
+
+estado_inicializacao = EstadoInicializacao.INICIANDO
+erro_inicializacao: str | None = None
+ATRASOS_INICIALIZACAO = (0, 2, 5, 10, 20, 30)
+
+
+def inicializar_banco():
+    global estado_inicializacao, erro_inicializacao
+
+    for tentativa, atraso in enumerate(ATRASOS_INICIALIZACAO, start=1):
+        if atraso:
+            time.sleep(atraso)
+        try:
+            Base.metadata.create_all(bind=engine)
+            aplicar_migracoes_multitenant(engine)
+        except Exception as erro:
+            engine.dispose()
+            erro_inicializacao = type(erro).__name__
+            if tentativa == len(ATRASOS_INICIALIZACAO):
+                estado_inicializacao = EstadoInicializacao.ERRO
+                logger.exception(
+                    "Falha definitiva ao inicializar o banco de dados"
+                )
+                return
+            logger.warning(
+                "Banco indisponível na tentativa %s; nova tentativa agendada",
+                tentativa,
+                exc_info=True,
+            )
+        else:
+            estado_inicializacao = EstadoInicializacao.PRONTO
+            erro_inicializacao = None
+            return
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Não bloqueia a abertura da porta do Render enquanto o Neon desperta e as
+    # migrações são verificadas. As rotas de negócio permanecem indisponíveis
+    # até a inicialização terminar.
+    tarefa = asyncio.create_task(asyncio.to_thread(inicializar_banco))
+    yield
+    if not tarefa.done():
+        tarefa.cancel()
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -68,14 +124,52 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def aguardar_inicializacao(request: Request, call_next):
+    if (
+        request.url.path not in {"/", "/health"}
+        and estado_inicializacao != EstadoInicializacao.PRONTO
+    ):
+        return JSONResponse(
+            {
+                "detail": (
+                    "Banco de dados inicializando."
+                    if estado_inicializacao == EstadoInicializacao.INICIANDO
+                    else "Falha ao inicializar o banco de dados."
+                ),
+                "status": estado_inicializacao,
+            },
+            status_code=503,
+            headers={"Retry-After": "5"},
+        )
+    return await call_next(request)
+
+
 @app.get("/")
 def inicio():
-    return {"mensagem": "API de ocorrências funcionando"}
+    return {
+        "mensagem": "API de ocorrências funcionando",
+        "status": estado_inicializacao,
+    }
 
 
 @app.get("/health")
-def health(banco: Session = Depends(pegar_banco)):
-    banco.execute(text("SELECT 1"))
+def health():
+    if estado_inicializacao == EstadoInicializacao.INICIANDO:
+        return JSONResponse(
+            {"status": estado_inicializacao},
+            status_code=503,
+            headers={"Retry-After": "5"},
+        )
+    if estado_inicializacao == EstadoInicializacao.ERRO:
+        return JSONResponse(
+            {
+                "status": estado_inicializacao,
+                "erro": erro_inicializacao,
+            },
+            status_code=503,
+            headers={"Retry-After": "30"},
+        )
     return {"status": "ok"}
 
 

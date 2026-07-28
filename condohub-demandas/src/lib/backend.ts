@@ -3,7 +3,8 @@ import { cookies } from "next/headers";
 
 const API_URL = process.env.API_URL;
 const STATUS_TRANSITORIOS = new Set([502, 503, 504]);
-const ATRASOS_TENTATIVAS_MS = [0, 1500, 3000, 5000];
+const ATRASOS_TENTATIVAS_MS = [0, 1_000, 2_000];
+const LIMITE_REQUISICAO_MS = 5_000;
 const CONDOMINIO_PADRAO =
   process.env.CONDOMINIO_PADRAO_SLUG ?? "camila-barbosa";
 
@@ -45,10 +46,15 @@ async function encaminhar(
     }
 
     try {
+      const limite = AbortSignal.timeout(LIMITE_REQUISICAO_MS);
+      const signal = init?.signal
+        ? AbortSignal.any([init.signal, limite])
+        : limite;
       const resposta = await fetch(`${API_URL}${caminho}`, {
         ...init,
         cache: "no-store",
         headers: cabecalhos,
+        signal,
       });
 
       const deveRepetir =

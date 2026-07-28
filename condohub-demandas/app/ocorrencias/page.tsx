@@ -33,6 +33,8 @@ const statusChamado = {
   },
 };
 
+const MAXIMO_TENTATIVAS = 5;
+
 function calcularDias(dataSolicitacao: string) {
   const dataInicial = new Date(dataSolicitacao);
   const hoje = new Date();
@@ -90,19 +92,31 @@ export default function OcorrenciasPage() {
 
   useEffect(() => {
     async function carregarOcorrencias() {
-      for (let tentativa = 1; tentativa <= 3; tentativa += 1) {
+      for (
+        let tentativa = 1;
+        tentativa <= MAXIMO_TENTATIVAS;
+        tentativa += 1
+      ) {
         try {
-          const resposta = await fetch("/api/ocorrencias");
+          const resposta = await fetch("/api/ocorrencias", {
+            cache: "no-store",
+            signal: AbortSignal.timeout(20_000),
+          });
 
           if (!resposta.ok) {
-            throw new Error("Não foi possível carregar as ocorrências.");
+            const dados = (await resposta.json().catch(() => null)) as {
+              detail?: string;
+            } | null;
+            throw new Error(
+              dados?.detail ?? "Não foi possível carregar as ocorrências.",
+            );
           }
 
           setOcorrencias(await resposta.json());
           setCarregando(false);
           return;
         } catch (error) {
-          if (tentativa === 3) {
+          if (tentativa === MAXIMO_TENTATIVAS) {
             setErro(
               error instanceof Error ? error.message : "Erro inesperado.",
             );
@@ -110,7 +124,7 @@ export default function OcorrenciasPage() {
             return;
           }
 
-          await new Promise((resolver) => setTimeout(resolver, tentativa * 2500));
+          await new Promise((resolver) => setTimeout(resolver, 3_000));
         }
       }
     }
