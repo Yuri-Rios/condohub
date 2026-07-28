@@ -5,6 +5,7 @@ import { Fragment, useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import ThreadChamado from "@/components/ThreadChamado";
 import Titulo from "@/components/Titulo";
+import { aguardarApiPronta } from "@/src/lib/api-pronta";
 import { useAcesso } from "@/src/hooks/useAcesso";
 
 type Ocorrencia = {
@@ -92,6 +93,13 @@ export default function OcorrenciasPage() {
 
   useEffect(() => {
     async function carregarOcorrencias() {
+      const apiPronta = await aguardarApiPronta();
+      if (!apiPronta) {
+        setErro("A API não conseguiu iniciar. Tente recarregar a página.");
+        setCarregando(false);
+        return;
+      }
+
       for (
         let tentativa = 1;
         tentativa <= MAXIMO_TENTATIVAS;
