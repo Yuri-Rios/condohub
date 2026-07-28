@@ -67,7 +67,7 @@ class EstadoInicializacao(str, Enum):
 estado_inicializacao = EstadoInicializacao.INICIANDO
 erro_inicializacao: str | None = None
 ATRASOS_INICIALIZACAO = (0, 2, 5, 10, 20, 30)
-VERSAO_WAKEUP = "long-wakeup-v3"
+VERSAO_WAKEUP = "browser-direct-v4"
 
 
 def inicializar_banco():

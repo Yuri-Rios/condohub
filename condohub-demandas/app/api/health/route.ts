@@ -3,7 +3,7 @@ const API_URL = process.env.API_URL;
 // Interromper em poucos segundos faz o serviço voltar a responder 502 sem
 // concluir o despertar. Esta rota existe justamente para sustentar a conexão.
 const LIMITE_TENTATIVA_MS = 90_000;
-const VERSAO_WAKEUP = "long-wakeup-v3";
+const VERSAO_WAKEUP = "browser-direct-v4";
 
 export async function GET() {
   if (!API_URL) {
