@@ -1,5 +1,6 @@
 const API_URL = process.env.API_URL;
 const LIMITE_TENTATIVA_MS = 6_000;
+const VERSAO_WAKEUP = "coordinated-v2";
 
 export async function GET() {
   if (!API_URL) {
@@ -20,6 +21,7 @@ export async function GET() {
       headers: {
         "content-type":
           resposta.headers.get("content-type") ?? "application/json",
+        "x-condohub-wakeup-version": VERSAO_WAKEUP,
       },
     });
   } catch {
@@ -28,7 +30,10 @@ export async function GET() {
     // novas tentativas enquanto o Render continua iniciando a API.
     return Response.json(
       { detail: "API iniciando. Uma nova tentativa será feita em instantes." },
-      { status: 503 },
+      {
+        status: 503,
+        headers: { "x-condohub-wakeup-version": VERSAO_WAKEUP },
+      },
     );
   }
 }

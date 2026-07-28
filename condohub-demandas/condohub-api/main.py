@@ -67,6 +67,7 @@ class EstadoInicializacao(str, Enum):
 estado_inicializacao = EstadoInicializacao.INICIANDO
 erro_inicializacao: str | None = None
 ATRASOS_INICIALIZACAO = (0, 2, 5, 10, 20, 30)
+VERSAO_WAKEUP = "coordinated-v2"
 
 
 def inicializar_banco():
@@ -150,6 +151,7 @@ def inicio():
     return {
         "mensagem": "API de ocorrências funcionando",
         "status": estado_inicializacao,
+        "wakeup": VERSAO_WAKEUP,
     }
 
 
@@ -157,7 +159,10 @@ def inicio():
 def health():
     if estado_inicializacao == EstadoInicializacao.INICIANDO:
         return JSONResponse(
-            {"status": estado_inicializacao},
+            {
+                "status": estado_inicializacao,
+                "wakeup": VERSAO_WAKEUP,
+            },
             status_code=503,
             headers={"Retry-After": "5"},
         )
@@ -166,11 +171,12 @@ def health():
             {
                 "status": estado_inicializacao,
                 "erro": erro_inicializacao,
+                "wakeup": VERSAO_WAKEUP,
             },
             status_code=503,
             headers={"Retry-After": "30"},
         )
-    return {"status": "ok"}
+    return {"status": "ok", "wakeup": VERSAO_WAKEUP}
 
 
 def _validar_data_reserva(inicio: datetime):
