@@ -243,14 +243,13 @@ def criar_reserva(
     usuario: ContextoCondominio = Depends(exigir_morador),
 ):
     _validar_data_reserva(dados.inicio)
-    perfil = buscar_perfil_clerk(usuario.id)
     reserva = ReservaAmbiente(
         condominio_id=usuario.condominio_id,
         ambiente=dados.ambiente,
         inicio=dados.inicio,
         fim=dados.inicio + timedelta(hours=2),
         morador_id=usuario.id,
-        morador_nome=perfil.nome,
+        morador_nome=usuario.nome,
     )
     banco.add(reserva)
     try:
@@ -353,15 +352,14 @@ def criar_ocorrencia(
     banco: Session = Depends(pegar_banco),
     usuario: ContextoCondominio = Depends(contexto_condominio),
 ):
-    perfil = buscar_perfil_clerk(usuario.id)
     nova_ocorrencia = Ocorrencia(
         condominio_id=usuario.condominio_id,
         titulo=dados.titulo,
         local=dados.local,
         descricao=dados.descricao,
         autor_id=usuario.id,
-        autor_nome=perfil.nome,
-        autor_avatar_url=perfil.avatar_url,
+        autor_nome=usuario.nome,
+        autor_avatar_url=usuario.avatar_url,
     )
 
     banco.add(nova_ocorrencia)
@@ -499,13 +497,12 @@ def criar_mensagem(
     if not ocorrencia:
         raise HTTPException(status_code=404, detail="Chamado não encontrado.")
 
-    perfil = buscar_perfil_clerk(usuario.id)
     mensagem = MensagemOcorrencia(
         ocorrencia_id=ocorrencia_id,
         conteudo=dados.conteudo,
         autor_id=usuario.id,
-        autor_nome=perfil.nome,
-        autor_avatar_url=perfil.avatar_url,
+        autor_nome=usuario.nome,
+        autor_avatar_url=usuario.avatar_url,
         autor_papeis=",".join(sorted(usuario.papeis)),
     )
     banco.add(mensagem)

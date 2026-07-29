@@ -27,6 +27,8 @@ CONDOMINIO_PADRAO_SLUG = "camila-barbosa"
 @dataclass(frozen=True)
 class ContextoCondominio:
     id: str
+    nome: str
+    avatar_url: str | None
     papeis: frozenset[str]
     condominio_id: int
     condominio_slug: str
@@ -163,6 +165,8 @@ def contexto_condominio(
         )
     return ContextoCondominio(
         id=usuario.id,
+        nome=membro.nome,
+        avatar_url=membro.avatar_url,
         papeis=papeis,
         condominio_id=condominio.id,
         condominio_slug=condominio.slug,
