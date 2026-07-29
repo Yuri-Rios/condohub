@@ -21,3 +21,6 @@ __pycache__/
 
 # macOS
 .DS_Store
+
+# Arquivos locais de dados e relatórios
+/data/
