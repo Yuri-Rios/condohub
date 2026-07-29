@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CondoHub</string>
+    <string name="title_activity_main">CondoHub</string>
+    <string name="package_name">com.condohub.app</string>
+    <string name="custom_url_scheme">com.condohub.app</string>
+</resources>

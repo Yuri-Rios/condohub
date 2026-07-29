@@ -23,6 +23,9 @@
 # misc
 .DS_Store
 *.pem
+*.jks
+*.keystore
+keystore.properties
 
 # debug
 npm-debug.log*

@@ -38,6 +38,46 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Aplicativo Android (Capacitor)
+
+O projeto Android fica em `android/` e carrega a aplicação Next.js hospedada.
+Por padrão, usa `https://condohub-app.onrender.com`. Para apontar para outro
+ambiente, defina `CAPACITOR_SERVER_URL` antes de sincronizar:
+
+```bash
+CAPACITOR_SERVER_URL=https://app.exemplo.com npm run android:sync
+```
+
+Para testar com o Next.js local no emulador Android:
+
+```bash
+npm run dev
+CAPACITOR_SERVER_URL=http://10.0.2.2:3000 npm run android:sync
+npm run android:open
+```
+
+Instale o Android Studio e, pelo SDK Manager, o Android SDK antes do primeiro
+build. Depois, gere um APK de desenvolvimento com:
+
+```bash
+npm run android:build
+```
+
+O arquivo será criado em
+`android/app/build/outputs/apk/debug/app-debug.apk`. Para publicar na Play
+Store ainda é necessário configurar assinatura e gerar um Android App Bundle
+de release.
+
+Para gerar o Android App Bundle com a URL pública:
+
+```bash
+CAPACITOR_SERVER_URL=https://condohub-app.onrender.com npm run android:bundle
+```
+
+O `.aab` de release precisa ser assinado com uma chave de upload antes de ser
+aceito pelo Play Console. Não versione arquivos `.jks`, `.keystore` ou suas
+senhas.
+
 ## Autenticação, condomínios e papéis
 
 O frontend usa Clerk e a API FastAPI valida o mesmo token antes de ler ou
