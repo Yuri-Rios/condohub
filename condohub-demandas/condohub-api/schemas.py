@@ -31,6 +31,36 @@ class OcorrenciaCriar(BaseModel):
     local: str
     descricao: str
 
+    @field_validator("titulo")
+    @classmethod
+    def validar_titulo(cls, valor: str):
+        valor = valor.strip()
+        if len(valor) < 3:
+            raise ValueError("Informe um título com pelo menos 3 caracteres.")
+        if len(valor) > 160:
+            raise ValueError("O título deve ter no máximo 160 caracteres.")
+        return valor
+
+    @field_validator("local")
+    @classmethod
+    def validar_local(cls, valor: str):
+        valor = valor.strip()
+        if len(valor) < 2:
+            raise ValueError("Informe o local do chamado.")
+        if len(valor) > 160:
+            raise ValueError("O local deve ter no máximo 160 caracteres.")
+        return valor
+
+    @field_validator("descricao")
+    @classmethod
+    def validar_descricao(cls, valor: str):
+        valor = valor.strip()
+        if len(valor) < 3:
+            raise ValueError("Descreva o chamado.")
+        if len(valor) > 4000:
+            raise ValueError("A descrição deve ter no máximo 4.000 caracteres.")
+        return valor
+
 
 class OcorrenciaResposta(BaseModel):
     id: int
@@ -40,6 +70,7 @@ class OcorrenciaResposta(BaseModel):
     status: str
     data_solicitacao: datetime
     autor_nome: str | None = None
+    pode_editar: bool = False
 
     class Config:
         from_attributes = True

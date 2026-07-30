@@ -13,12 +13,15 @@ type Mensagem = {
 };
 
 type Thread = {
+  titulo: string;
+  local: string;
   descricao: string;
   status: StatusChamado;
   autor_nome: string | null;
   autor_avatar_url: string | null;
   pode_alterar_status: boolean;
   pode_reabrir: boolean;
+  pode_editar: boolean;
   mensagens: Mensagem[];
 };
 
@@ -70,9 +73,15 @@ function Avatar({
 export default function ThreadChamado({
   ocorrenciaId,
   onStatusAlterado,
+  onOcorrenciaAlterada,
 }: {
   ocorrenciaId: number;
   onStatusAlterado?: (status: StatusChamado) => void;
+  onOcorrenciaAlterada?: (dados: {
+    titulo: string;
+    local: string;
+    descricao: string;
+  }) => void;
 }) {
   const [thread, setThread] = useState<Thread | null>(null);
   const [mensagem, setMensagem] = useState("");
@@ -81,6 +90,11 @@ export default function ThreadChamado({
   const [enviando, setEnviando] = useState(false);
   const [reagindo, setReagindo] = useState<string | null>(null);
   const [alterandoStatus, setAlterandoStatus] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+  const [titulo, setTitulo] = useState("");
+  const [local, setLocal] = useState("");
+  const [descricao, setDescricao] = useState("");
   const campoMensagem = useRef<HTMLTextAreaElement>(null);
 
   function adicionarEmoji(emoji: string) {
@@ -174,6 +188,52 @@ export default function ThreadChamado({
     await carregar();
   }
 
+  function iniciarEdicao() {
+    if (!thread) return;
+    setTitulo(thread.titulo);
+    setLocal(thread.local);
+    setDescricao(thread.descricao);
+    setErro("");
+    setEditando(true);
+  }
+
+  async function salvarEdicao(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!titulo.trim() || !local.trim() || !descricao.trim()) return;
+
+    setSalvandoEdicao(true);
+    setErro("");
+    const resposta = await fetch(`/api/ocorrencias/${ocorrenciaId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ titulo, local, descricao }),
+    });
+    const dados = await resposta.json();
+    setSalvandoEdicao(false);
+
+    if (!resposta.ok) {
+      setErro(dados.detail ?? "Não foi possível editar o chamado.");
+      return;
+    }
+
+    setThread((atual) =>
+      atual
+        ? {
+            ...atual,
+            titulo: dados.titulo,
+            local: dados.local,
+            descricao: dados.descricao,
+          }
+        : atual,
+    );
+    onOcorrenciaAlterada?.({
+      titulo: dados.titulo,
+      local: dados.local,
+      descricao: dados.descricao,
+    });
+    setEditando(false);
+  }
+
   if (erro && !thread) {
     return <p className="rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{erro}</p>;
   }
@@ -224,6 +284,63 @@ export default function ThreadChamado({
           </button>
         ) : null}
       </div>
+      {editando ? (
+        <form
+          onSubmit={salvarEdicao}
+          className="rounded-2xl border border-blue-200 bg-white p-4 shadow-sm"
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-sm font-semibold text-slate-700">
+              Título
+              <input
+                value={titulo}
+                maxLength={160}
+                required
+                onChange={(event) => setTitulo(event.target.value)}
+                className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 font-normal outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              />
+            </label>
+            <label className="text-sm font-semibold text-slate-700">
+              Local
+              <input
+                value={local}
+                maxLength={160}
+                required
+                onChange={(event) => setLocal(event.target.value)}
+                className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 font-normal outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              />
+            </label>
+          </div>
+          <label className="mt-4 block text-sm font-semibold text-slate-700">
+            Descrição
+            <textarea
+              value={descricao}
+              maxLength={4000}
+              required
+              rows={5}
+              onChange={(event) => setDescricao(event.target.value)}
+              className="mt-2 w-full resize-y rounded-xl border border-slate-200 px-4 py-3 font-normal outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+            />
+          </label>
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={salvandoEdicao}
+              onClick={() => setEditando(false)}
+              className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={salvandoEdicao}
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {salvandoEdicao ? "Salvando..." : "Salvar alterações"}
+            </button>
+          </div>
+        </form>
+      ) : (
       <div className="flex gap-3">
         {thread.autor_nome && (
           <Avatar
@@ -236,15 +353,30 @@ export default function ThreadChamado({
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
               Descrição inicial
             </span>
-            <span className="text-xs text-slate-400">
-              {thread.autor_nome ? `Aberto por ${thread.autor_nome}` : "Autor protegido"}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-400">
+                {thread.autor_nome ? `Aberto por ${thread.autor_nome}` : "Autor protegido"}
+              </span>
+              {thread.pode_editar && (
+                <button
+                  type="button"
+                  onClick={iniciarEdicao}
+                  className="rounded-lg px-2.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-50"
+                >
+                  Editar chamado
+                </button>
+              )}
+            </div>
           </div>
+          <p className="mt-2 text-xs font-semibold text-slate-500">
+            Local: {thread.local}
+          </p>
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
             {thread.descricao}
           </p>
         </div>
       </div>
+      )}
 
       <div className="mt-5 space-y-4">
         {thread.mensagens.length === 0 ? (

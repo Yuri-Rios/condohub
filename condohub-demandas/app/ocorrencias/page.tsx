@@ -15,6 +15,7 @@ type Ocorrencia = {
   descricao: string;
   data_solicitacao: string;
   autor_nome: string | null;
+  pode_editar: boolean;
   status: "novo" | "em_andamento" | "em_espera" | "fechado";
 };
 
@@ -251,6 +252,15 @@ export default function OcorrenciasPage() {
                         <td colSpan={5} className="px-5 py-5 sm:px-10">
                           <ThreadChamado
                             ocorrenciaId={ocorrencia.id}
+                            onOcorrenciaAlterada={(dados) =>
+                              setOcorrencias((atuais) =>
+                                atuais.map((item) =>
+                                  item.id === ocorrencia.id
+                                    ? { ...item, ...dados }
+                                    : item,
+                                ),
+                              )
+                            }
                             onStatusAlterado={(status) =>
                               setOcorrencias((atuais) =>
                                 atuais.map((item) =>

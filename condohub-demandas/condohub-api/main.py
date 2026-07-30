@@ -341,6 +341,7 @@ def listar_ocorrencias(
             "status": item.status,
             "data_solicitacao": item.data_solicitacao,
             "autor_nome": item.autor_nome if pode_ver_autor else None,
+            "pode_editar": item.autor_id == usuario.id,
         }
         for item in ocorrencias
     ]
@@ -374,6 +375,7 @@ def criar_ocorrencia(
         "status": nova_ocorrencia.status,
         "data_solicitacao": nova_ocorrencia.data_solicitacao,
         "autor_nome": None,
+        "pode_editar": True,
     }
 
 
@@ -463,6 +465,7 @@ def obter_thread(
         "autor_avatar_url": (
             ocorrencia.autor_avatar_url if pode_ver_autor else None
         ),
+        "pode_editar": ocorrencia.autor_id == usuario.id,
         "pode_alterar_status": pode_alterar_status,
         "pode_reabrir": pode_reabrir,
         "mensagens": [
@@ -561,6 +564,7 @@ def alterar_status_ocorrencia(
             )
             else None
         ),
+        "pode_editar": ocorrencia.autor_id == usuario.id,
     }
 
 
@@ -621,7 +625,7 @@ def atualizar_ocorrencia(
     ocorrencia_id: int,
     dados: OcorrenciaCriar,
     banco: Session = Depends(pegar_banco),
-    usuario: ContextoCondominio = Depends(exigir_gestor),
+    usuario: ContextoCondominio = Depends(contexto_condominio),
 ):
     ocorrencia = (
         banco.query(Ocorrencia)
@@ -633,7 +637,12 @@ def atualizar_ocorrencia(
     )
 
     if ocorrencia is None:
-        return {"erro": "Ocorrência não encontrada"}
+        raise HTTPException(status_code=404, detail="Chamado não encontrado.")
+    if ocorrencia.autor_id != usuario.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Somente o autor pode editar este chamado.",
+        )
 
     ocorrencia.titulo = dados.titulo
     ocorrencia.local = dados.local
@@ -642,7 +651,22 @@ def atualizar_ocorrencia(
     banco.commit()
     banco.refresh(ocorrencia)
 
-    return ocorrencia
+    return {
+        "id": ocorrencia.id,
+        "titulo": ocorrencia.titulo,
+        "local": ocorrencia.local,
+        "descricao": ocorrencia.descricao,
+        "status": ocorrencia.status,
+        "data_solicitacao": ocorrencia.data_solicitacao,
+        "autor_nome": (
+            ocorrencia.autor_nome
+            if not usuario.papeis.isdisjoint(
+                PAPEIS_COM_IDENTIDADE_DOS_CHAMADOS
+            )
+            else None
+        ),
+        "pode_editar": True,
+    }
 
 
 @app.delete("/ocorrencias/{ocorrencia_id}", status_code=204)
