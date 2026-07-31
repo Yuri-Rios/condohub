@@ -125,12 +125,13 @@ class PedidoCompra(Base):
     __tablename__ = "pedidos_compra"
     id = Column(Integer, primary_key=True, index=True)
     condominio_id = Column(Integer, ForeignKey("condominios.id", ondelete="CASCADE"), nullable=False, index=True)
+    ocorrencia_id = Column(Integer, ForeignKey("ocorrencias.id", ondelete="SET NULL"), nullable=True, index=True)
     item = Column(String(160), nullable=False)
     quantidade = Column(Numeric(12, 3), nullable=False)
     unidade = Column(String(30), nullable=False)
     justificativa = Column(Text, nullable=False)
     valor_estimado = Column(Numeric(12, 2), nullable=True)
-    status = Column(String(30), nullable=False, default="solicitado", index=True)
+    status = Column(String(30), nullable=False, default="create", index=True)
     solicitante_id = Column(String(255), nullable=False, index=True)
     solicitante_nome = Column(String(160), nullable=False)
     criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
@@ -146,22 +147,6 @@ class HistoricoPedidoCompra(Base):
     autor_id = Column(String(255), nullable=False)
     autor_nome = Column(String(160), nullable=False)
     criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
-
-
-class Compra(Base):
-    __tablename__ = "compras"
-    id = Column(Integer, primary_key=True, index=True)
-    condominio_id = Column(Integer, ForeignKey("condominios.id", ondelete="CASCADE"), nullable=False, index=True)
-    pedido_id = Column(Integer, ForeignKey("pedidos_compra.id", ondelete="SET NULL"), nullable=True, index=True)
-    item = Column(String(160), nullable=False)
-    quantidade = Column(Numeric(12, 3), nullable=False)
-    unidade = Column(String(30), nullable=False)
-    fornecedor = Column(String(160), nullable=True)
-    valor_total = Column(Numeric(12, 2), nullable=False)
-    observacao = Column(Text, nullable=True)
-    comprado_por_id = Column(String(255), nullable=False)
-    comprado_por_nome = Column(String(160), nullable=False)
-    data_compra = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
 
 
 class ItemEstoque(Base):

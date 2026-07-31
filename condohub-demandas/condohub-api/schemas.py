@@ -138,6 +138,7 @@ class StatusOcorrenciaAlterar(BaseModel):
 
 
 class PedidoCompraCriar(BaseModel):
+    ocorrencia_id: int | None = None
     item: str = Field(min_length=2, max_length=160)
     quantidade: float = Field(gt=0)
     unidade: str = Field(min_length=1, max_length=30)
@@ -152,19 +153,9 @@ class PedidoCompraStatus(BaseModel):
     @field_validator("status")
     @classmethod
     def validar_status(cls, valor: str):
-        if valor not in {"solicitado", "aprovado", "rejeitado", "comprado", "cancelado"}:
+        if valor not in {"create", "ongoing", "done"}:
             raise ValueError("Status inválido.")
         return valor
-
-
-class CompraCriar(BaseModel):
-    pedido_id: int | None = None
-    item: str = Field(min_length=2, max_length=160)
-    quantidade: float = Field(gt=0)
-    unidade: str = Field(min_length=1, max_length=30)
-    fornecedor: str | None = Field(default=None, max_length=160)
-    valor_total: float = Field(ge=0)
-    observacao: str | None = Field(default=None, max_length=2000)
 
 
 class ItemEstoqueCriar(BaseModel):

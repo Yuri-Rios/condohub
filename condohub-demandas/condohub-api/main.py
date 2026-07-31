@@ -29,7 +29,6 @@ from migrations_runner import aplicar_migracoes_multitenant
 from models import (
     AdministradorPlataforma,
     Condominio,
-    Compra,
     FUSO_BRASIL,
     MembroCondominio,
     MensagemOcorrencia,
@@ -46,7 +45,6 @@ from models import (
 )
 from schemas import (
     CondominioCriar,
-    CompraCriar,
     OcorrenciaCriar,
     OcorrenciaDetalhe,
     OcorrenciaResposta,
@@ -712,7 +710,7 @@ def _pedido_resposta(pedido: PedidoCompra, banco: Session, usuario: ContextoCond
         .all()
     )
     return {
-        "id": pedido.id, "item": pedido.item, "quantidade": float(pedido.quantidade),
+        "id": pedido.id, "ocorrencia_id": pedido.ocorrencia_id, "item": pedido.item, "quantidade": float(pedido.quantidade),
         "unidade": pedido.unidade, "justificativa": pedido.justificativa,
         "valor_estimado": float(pedido.valor_estimado) if pedido.valor_estimado is not None else None,
         "status": pedido.status, "solicitante_nome": pedido.solicitante_nome,
@@ -731,11 +729,13 @@ def listar_pedidos_compra(banco: Session = Depends(pegar_banco), usuario: Contex
 
 @app.post("/pedidos-compra", status_code=201)
 def criar_pedido_compra(dados: PedidoCompraCriar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
-    pedido = PedidoCompra(condominio_id=usuario.condominio_id, item=dados.item.strip(), quantidade=dados.quantidade,
+    if dados.ocorrencia_id and not banco.query(Ocorrencia).filter(Ocorrencia.id == dados.ocorrencia_id, Ocorrencia.condominio_id == usuario.condominio_id).first():
+        raise HTTPException(422, "Chamado inválido.")
+    pedido = PedidoCompra(condominio_id=usuario.condominio_id, ocorrencia_id=dados.ocorrencia_id, item=dados.item.strip(), quantidade=dados.quantidade,
                           unidade=dados.unidade.strip(), justificativa=dados.justificativa.strip(), valor_estimado=dados.valor_estimado,
                           solicitante_id=usuario.id, solicitante_nome=usuario.nome)
     banco.add(pedido); banco.flush()
-    banco.add(HistoricoPedidoCompra(pedido_id=pedido.id, status="solicitado", observacao="Pedido criado.", autor_id=usuario.id, autor_nome=usuario.nome))
+    banco.add(HistoricoPedidoCompra(pedido_id=pedido.id, status="create", observacao="Pedido criado.", autor_id=usuario.id, autor_nome=usuario.nome))
     banco.commit(); banco.refresh(pedido)
     return _pedido_resposta(pedido, banco, usuario)
 
@@ -744,40 +744,27 @@ def criar_pedido_compra(dados: PedidoCompraCriar, banco: Session = Depends(pegar
 def alterar_status_pedido(pedido_id: int, dados: PedidoCompraStatus, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_aprovador)):
     pedido = banco.query(PedidoCompra).filter(PedidoCompra.id == pedido_id, PedidoCompra.condominio_id == usuario.condominio_id).first()
     if not pedido: raise HTTPException(404, "Pedido não encontrado.")
+    status_anterior = pedido.status
+    proximo_status = {"create": "ongoing", "ongoing": "done"}.get(status_anterior)
+    if dados.status != proximo_status:
+        raise HTTPException(422, "Siga o fluxo Criado → Em andamento → Concluído.")
     pedido.status = dados.status; pedido.atualizado_em = datetime.now(FUSO_BRASIL)
     banco.add(HistoricoPedidoCompra(pedido_id=pedido.id, status=dados.status, observacao=dados.observacao,
                                     autor_id=usuario.id, autor_nome=usuario.nome))
+    if dados.status == "done" and status_anterior != "done":
+        item = banco.query(ItemEstoque).filter(ItemEstoque.condominio_id == usuario.condominio_id,
+                                               ItemEstoque.nome == pedido.item,
+                                               ItemEstoque.unidade == pedido.unidade).first()
+        if not item:
+            item = ItemEstoque(condominio_id=usuario.condominio_id, nome=pedido.item,
+                               unidade=pedido.unidade, quantidade=0)
+            banco.add(item); banco.flush()
+        item.quantidade = float(item.quantidade) + float(pedido.quantidade)
+        banco.add(MovimentoEstoque(item_id=item.id, tipo="entrada", quantidade=pedido.quantidade,
+                                  observacao=f"Entrada automática do pedido #{pedido.id}.", pedido_id=pedido.id,
+                                  autor_id=usuario.id, autor_nome=usuario.nome))
     banco.commit(); banco.refresh(pedido)
     return _pedido_resposta(pedido, banco, usuario)
-
-
-@app.get("/compras")
-def listar_compras(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
-    compras = banco.query(Compra).filter(Compra.condominio_id == usuario.condominio_id).order_by(Compra.id.desc()).all()
-    return [{"id": c.id, "pedido_id": c.pedido_id, "item": c.item, "quantidade": float(c.quantidade),
-             "unidade": c.unidade, "fornecedor": c.fornecedor, "valor_total": float(c.valor_total),
-             "observacao": c.observacao, "comprado_por_nome": c.comprado_por_nome, "data_compra": c.data_compra}
-            for c in compras]
-
-
-@app.post("/compras", status_code=201)
-def registrar_compra(dados: CompraCriar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_aprovador)):
-    pedido = None
-    if dados.pedido_id is not None:
-        pedido = banco.query(PedidoCompra).filter(PedidoCompra.id == dados.pedido_id, PedidoCompra.condominio_id == usuario.condominio_id).first()
-        if not pedido: raise HTTPException(422, "Pedido de compra inválido.")
-    compra = Compra(condominio_id=usuario.condominio_id, pedido_id=dados.pedido_id, item=dados.item.strip(),
-                    quantidade=dados.quantidade, unidade=dados.unidade.strip(), fornecedor=dados.fornecedor,
-                    valor_total=dados.valor_total, observacao=dados.observacao, comprado_por_id=usuario.id,
-                    comprado_por_nome=usuario.nome)
-    banco.add(compra)
-    if pedido and pedido.status != "comprado":
-        pedido.status = "comprado"; pedido.atualizado_em = datetime.now(FUSO_BRASIL)
-        banco.add(HistoricoPedidoCompra(pedido_id=pedido.id, status="comprado", observacao="Compra registrada.", autor_id=usuario.id, autor_nome=usuario.nome))
-    banco.commit(); banco.refresh(compra)
-    return {"id": compra.id, "pedido_id": compra.pedido_id, "item": compra.item, "quantidade": float(compra.quantidade),
-            "unidade": compra.unidade, "fornecedor": compra.fornecedor, "valor_total": float(compra.valor_total),
-            "observacao": compra.observacao, "comprado_por_nome": compra.comprado_por_nome, "data_compra": compra.data_compra}
 
 
 def _item_estoque_resposta(item: ItemEstoque, banco: Session):
