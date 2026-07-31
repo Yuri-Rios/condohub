@@ -137,6 +137,64 @@ class StatusOcorrenciaAlterar(BaseModel):
         return valor
 
 
+class PedidoCompraCriar(BaseModel):
+    item: str = Field(min_length=2, max_length=160)
+    quantidade: float = Field(gt=0)
+    unidade: str = Field(min_length=1, max_length=30)
+    justificativa: str = Field(min_length=3, max_length=4000)
+    valor_estimado: float | None = Field(default=None, ge=0)
+
+
+class PedidoCompraStatus(BaseModel):
+    status: str
+    observacao: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("status")
+    @classmethod
+    def validar_status(cls, valor: str):
+        if valor not in {"solicitado", "aprovado", "rejeitado", "comprado", "cancelado"}:
+            raise ValueError("Status inválido.")
+        return valor
+
+
+class ItemEstoqueCriar(BaseModel):
+    nome: str = Field(min_length=2, max_length=160)
+    unidade: str = Field(min_length=1, max_length=30)
+    quantidade_inicial: float = Field(default=0, ge=0)
+    estoque_minimo: float | None = Field(default=None, ge=0)
+    localizacao: str | None = Field(default=None, max_length=160)
+    pedido_id: int | None = None
+
+
+class MovimentoEstoqueCriar(BaseModel):
+    tipo: str
+    quantidade: float = Field(gt=0)
+    observacao: str | None = Field(default=None, max_length=2000)
+    ocorrencia_id: int | None = None
+    pedido_id: int | None = None
+
+    @field_validator("tipo")
+    @classmethod
+    def validar_tipo(cls, valor: str):
+        if valor not in {"entrada", "saida"}:
+            raise ValueError("Tipo de movimento inválido.")
+        return valor
+
+
+class PrestadorCriar(BaseModel):
+    nome: str = Field(min_length=2, max_length=160)
+    especialidade: str = Field(min_length=2, max_length=160)
+    telefone: str | None = Field(default=None, max_length=60)
+    email: EmailStr | None = None
+    documento: str | None = Field(default=None, max_length=60)
+    observacoes: str | None = Field(default=None, max_length=4000)
+
+
+class AtendimentoPrestadorCriar(BaseModel):
+    ocorrencia_id: int
+    observacao: str | None = Field(default=None, max_length=2000)
+
+
 class ReservaCriar(BaseModel):
     ambiente: str
     inicio: datetime

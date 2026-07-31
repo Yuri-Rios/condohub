@@ -97,6 +97,9 @@ export default function Navbar() {
           >
             Chamados
           </Link>
+          {podeAdministrar && <Link href="/pedidos-compra" className={`whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold ${ativo("/pedidos-compra")}`}>Compras</Link>}
+          {podeAdministrar && <Link href="/estoque" className={`whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold ${ativo("/estoque")}`}>Estoque</Link>}
+          {podeAdministrar && <Link href="/prestadores" className={`whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold ${ativo("/prestadores")}`}>Prestadores</Link>}
           {podeAgendar && (
             <Link
               href="/agendamentos"

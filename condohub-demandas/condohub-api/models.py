@@ -1,7 +1,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 
 from database import Base
 
@@ -118,6 +118,88 @@ class ReacaoMensagem(Base):
     )
     usuario_id = Column(String(255), nullable=False, index=True)
     emoji = Column(String(10), nullable=False)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
+class PedidoCompra(Base):
+    __tablename__ = "pedidos_compra"
+    id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(Integer, ForeignKey("condominios.id", ondelete="CASCADE"), nullable=False, index=True)
+    item = Column(String(160), nullable=False)
+    quantidade = Column(Numeric(12, 3), nullable=False)
+    unidade = Column(String(30), nullable=False)
+    justificativa = Column(Text, nullable=False)
+    valor_estimado = Column(Numeric(12, 2), nullable=True)
+    status = Column(String(30), nullable=False, default="solicitado", index=True)
+    solicitante_id = Column(String(255), nullable=False, index=True)
+    solicitante_nome = Column(String(160), nullable=False)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+    atualizado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
+class HistoricoPedidoCompra(Base):
+    __tablename__ = "historico_pedidos_compra"
+    id = Column(Integer, primary_key=True)
+    pedido_id = Column(Integer, ForeignKey("pedidos_compra.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(30), nullable=False)
+    observacao = Column(Text, nullable=True)
+    autor_id = Column(String(255), nullable=False)
+    autor_nome = Column(String(160), nullable=False)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
+class ItemEstoque(Base):
+    __tablename__ = "itens_estoque"
+    id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(Integer, ForeignKey("condominios.id", ondelete="CASCADE"), nullable=False, index=True)
+    nome = Column(String(160), nullable=False)
+    unidade = Column(String(30), nullable=False)
+    quantidade = Column(Numeric(12, 3), nullable=False, default=0)
+    estoque_minimo = Column(Numeric(12, 3), nullable=True)
+    localizacao = Column(String(160), nullable=True)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
+class MovimentoEstoque(Base):
+    __tablename__ = "movimentos_estoque"
+    id = Column(Integer, primary_key=True)
+    item_id = Column(Integer, ForeignKey("itens_estoque.id", ondelete="CASCADE"), nullable=False, index=True)
+    tipo = Column(String(20), nullable=False)
+    quantidade = Column(Numeric(12, 3), nullable=False)
+    observacao = Column(Text, nullable=True)
+    ocorrencia_id = Column(Integer, ForeignKey("ocorrencias.id", ondelete="SET NULL"), nullable=True)
+    pedido_id = Column(Integer, ForeignKey("pedidos_compra.id", ondelete="SET NULL"), nullable=True)
+    autor_id = Column(String(255), nullable=False)
+    autor_nome = Column(String(160), nullable=False)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
+class PrestadorServico(Base):
+    __tablename__ = "prestadores_servico"
+    id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(Integer, ForeignKey("condominios.id", ondelete="CASCADE"), nullable=False, index=True)
+    nome = Column(String(160), nullable=False)
+    especialidade = Column(String(160), nullable=False)
+    telefone = Column(String(60), nullable=True)
+    email = Column(String(320), nullable=True)
+    documento = Column(String(60), nullable=True)
+    observacoes = Column(Text, nullable=True)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
+class AtendimentoPrestador(Base):
+    __tablename__ = "atendimentos_prestador"
+    __table_args__ = (
+        UniqueConstraint(
+            "prestador_id",
+            "ocorrencia_id",
+            name="uq_atendimento_prestador_ocorrencia",
+        ),
+    )
+    id = Column(Integer, primary_key=True)
+    prestador_id = Column(Integer, ForeignKey("prestadores_servico.id", ondelete="CASCADE"), nullable=False, index=True)
+    ocorrencia_id = Column(Integer, ForeignKey("ocorrencias.id", ondelete="CASCADE"), nullable=False, index=True)
+    observacao = Column(Text, nullable=True)
     criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
 
 

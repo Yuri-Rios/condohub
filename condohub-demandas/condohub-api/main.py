@@ -32,7 +32,13 @@ from models import (
     FUSO_BRASIL,
     MembroCondominio,
     MensagemOcorrencia,
+    AtendimentoPrestador,
+    HistoricoPedidoCompra,
+    ItemEstoque,
+    MovimentoEstoque,
     Ocorrencia,
+    PedidoCompra,
+    PrestadorServico,
     ReacaoMensagem,
     ReservaAmbiente,
     SolicitacaoAcesso,
@@ -49,6 +55,12 @@ from schemas import (
     ReservaReagendar,
     ReservaResposta,
     StatusOcorrenciaAlterar,
+    AtendimentoPrestadorCriar,
+    ItemEstoqueCriar,
+    MovimentoEstoqueCriar,
+    PedidoCompraCriar,
+    PedidoCompraStatus,
+    PrestadorCriar,
     SolicitacaoAcessoCriar,
     SolicitacaoAcessoResposta,
     SolicitacaoConfirmarConvite,
@@ -688,6 +700,132 @@ def excluir_ocorrencia(
 
     banco.delete(ocorrencia)
     banco.commit()
+
+
+def _pedido_resposta(pedido: PedidoCompra, banco: Session, usuario: ContextoCondominio):
+    historico = (
+        banco.query(HistoricoPedidoCompra)
+        .filter(HistoricoPedidoCompra.pedido_id == pedido.id)
+        .order_by(HistoricoPedidoCompra.criado_em.asc())
+        .all()
+    )
+    return {
+        "id": pedido.id, "item": pedido.item, "quantidade": float(pedido.quantidade),
+        "unidade": pedido.unidade, "justificativa": pedido.justificativa,
+        "valor_estimado": float(pedido.valor_estimado) if pedido.valor_estimado is not None else None,
+        "status": pedido.status, "solicitante_nome": pedido.solicitante_nome,
+        "criado_em": pedido.criado_em, "atualizado_em": pedido.atualizado_em,
+        "pode_gerenciar": not usuario.papeis.isdisjoint({"sindico", "admin"}),
+        "historico": [{"id": h.id, "status": h.status, "observacao": h.observacao,
+                       "autor_nome": h.autor_nome, "criado_em": h.criado_em} for h in historico],
+    }
+
+
+@app.get("/pedidos-compra")
+def listar_pedidos_compra(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    pedidos = banco.query(PedidoCompra).filter(PedidoCompra.condominio_id == usuario.condominio_id).order_by(PedidoCompra.id.desc()).all()
+    return [_pedido_resposta(p, banco, usuario) for p in pedidos]
+
+
+@app.post("/pedidos-compra", status_code=201)
+def criar_pedido_compra(dados: PedidoCompraCriar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    pedido = PedidoCompra(condominio_id=usuario.condominio_id, item=dados.item.strip(), quantidade=dados.quantidade,
+                          unidade=dados.unidade.strip(), justificativa=dados.justificativa.strip(), valor_estimado=dados.valor_estimado,
+                          solicitante_id=usuario.id, solicitante_nome=usuario.nome)
+    banco.add(pedido); banco.flush()
+    banco.add(HistoricoPedidoCompra(pedido_id=pedido.id, status="solicitado", observacao="Pedido criado.", autor_id=usuario.id, autor_nome=usuario.nome))
+    banco.commit(); banco.refresh(pedido)
+    return _pedido_resposta(pedido, banco, usuario)
+
+
+@app.patch("/pedidos-compra/{pedido_id}/status")
+def alterar_status_pedido(pedido_id: int, dados: PedidoCompraStatus, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_aprovador)):
+    pedido = banco.query(PedidoCompra).filter(PedidoCompra.id == pedido_id, PedidoCompra.condominio_id == usuario.condominio_id).first()
+    if not pedido: raise HTTPException(404, "Pedido não encontrado.")
+    pedido.status = dados.status; pedido.atualizado_em = datetime.now(FUSO_BRASIL)
+    banco.add(HistoricoPedidoCompra(pedido_id=pedido.id, status=dados.status, observacao=dados.observacao,
+                                    autor_id=usuario.id, autor_nome=usuario.nome))
+    banco.commit(); banco.refresh(pedido)
+    return _pedido_resposta(pedido, banco, usuario)
+
+
+def _item_estoque_resposta(item: ItemEstoque, banco: Session):
+    movimentos = banco.query(MovimentoEstoque).filter(MovimentoEstoque.item_id == item.id).order_by(MovimentoEstoque.id.desc()).all()
+    return {"id": item.id, "nome": item.nome, "unidade": item.unidade, "quantidade": float(item.quantidade),
+            "estoque_minimo": float(item.estoque_minimo) if item.estoque_minimo is not None else None,
+            "localizacao": item.localizacao, "criado_em": item.criado_em,
+            "movimentos": [{"id": m.id, "tipo": m.tipo, "quantidade": float(m.quantidade), "observacao": m.observacao,
+                             "ocorrencia_id": m.ocorrencia_id, "pedido_id": m.pedido_id, "autor_nome": m.autor_nome,
+                             "criado_em": m.criado_em} for m in movimentos]}
+
+
+@app.get("/estoque")
+def listar_estoque(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    itens = banco.query(ItemEstoque).filter(ItemEstoque.condominio_id == usuario.condominio_id).order_by(ItemEstoque.nome.asc()).all()
+    return [_item_estoque_resposta(i, banco) for i in itens]
+
+
+@app.post("/estoque", status_code=201)
+def criar_item_estoque(dados: ItemEstoqueCriar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    item = ItemEstoque(condominio_id=usuario.condominio_id, nome=dados.nome.strip(), unidade=dados.unidade.strip(),
+                       quantidade=dados.quantidade_inicial, estoque_minimo=dados.estoque_minimo, localizacao=dados.localizacao)
+    banco.add(item); banco.flush()
+    if dados.quantidade_inicial > 0:
+        banco.add(MovimentoEstoque(item_id=item.id, tipo="entrada", quantidade=dados.quantidade_inicial,
+                                  observacao="Saldo inicial.", pedido_id=dados.pedido_id, autor_id=usuario.id, autor_nome=usuario.nome))
+    banco.commit(); banco.refresh(item)
+    return _item_estoque_resposta(item, banco)
+
+
+@app.post("/estoque/{item_id}/movimentos")
+def movimentar_estoque(item_id: int, dados: MovimentoEstoqueCriar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    item = banco.query(ItemEstoque).filter(ItemEstoque.id == item_id, ItemEstoque.condominio_id == usuario.condominio_id).first()
+    if not item: raise HTTPException(404, "Item não encontrado.")
+    if dados.ocorrencia_id and not banco.query(Ocorrencia).filter(Ocorrencia.id == dados.ocorrencia_id, Ocorrencia.condominio_id == usuario.condominio_id).first():
+        raise HTTPException(422, "Chamado inválido.")
+    if dados.pedido_id and not banco.query(PedidoCompra).filter(PedidoCompra.id == dados.pedido_id, PedidoCompra.condominio_id == usuario.condominio_id).first():
+        raise HTTPException(422, "Pedido inválido.")
+    novo_saldo = float(item.quantidade) + (dados.quantidade if dados.tipo == "entrada" else -dados.quantidade)
+    if novo_saldo < 0: raise HTTPException(422, "A saída é maior que o saldo disponível.")
+    item.quantidade = novo_saldo
+    banco.add(MovimentoEstoque(item_id=item.id, tipo=dados.tipo, quantidade=dados.quantidade, observacao=dados.observacao,
+                              ocorrencia_id=dados.ocorrencia_id, pedido_id=dados.pedido_id, autor_id=usuario.id, autor_nome=usuario.nome))
+    banco.commit(); banco.refresh(item)
+    return _item_estoque_resposta(item, banco)
+
+
+def _prestador_resposta(prestador: PrestadorServico, banco: Session):
+    atendimentos = banco.query(AtendimentoPrestador, Ocorrencia).join(Ocorrencia, Ocorrencia.id == AtendimentoPrestador.ocorrencia_id).filter(AtendimentoPrestador.prestador_id == prestador.id).order_by(AtendimentoPrestador.id.desc()).all()
+    return {"id": prestador.id, "nome": prestador.nome, "especialidade": prestador.especialidade, "telefone": prestador.telefone,
+            "email": prestador.email, "documento": prestador.documento, "observacoes": prestador.observacoes,
+            "criado_em": prestador.criado_em,
+            "atendimentos": [{"id": a.id, "ocorrencia_id": o.id, "ocorrencia_titulo": o.titulo,
+                               "observacao": a.observacao, "criado_em": a.criado_em} for a, o in atendimentos]}
+
+
+@app.get("/prestadores")
+def listar_prestadores(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    itens = banco.query(PrestadorServico).filter(PrestadorServico.condominio_id == usuario.condominio_id).order_by(PrestadorServico.nome.asc()).all()
+    return [_prestador_resposta(i, banco) for i in itens]
+
+
+@app.post("/prestadores", status_code=201)
+def criar_prestador(dados: PrestadorCriar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_aprovador)):
+    prestador = PrestadorServico(condominio_id=usuario.condominio_id, **dados.model_dump())
+    banco.add(prestador); banco.commit(); banco.refresh(prestador)
+    return _prestador_resposta(prestador, banco)
+
+
+@app.post("/prestadores/{prestador_id}/atendimentos", status_code=201)
+def vincular_atendimento(prestador_id: int, dados: AtendimentoPrestadorCriar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_aprovador)):
+    prestador = banco.query(PrestadorServico).filter(PrestadorServico.id == prestador_id, PrestadorServico.condominio_id == usuario.condominio_id).first()
+    ocorrencia = banco.query(Ocorrencia).filter(Ocorrencia.id == dados.ocorrencia_id, Ocorrencia.condominio_id == usuario.condominio_id).first()
+    if not prestador or not ocorrencia: raise HTTPException(404, "Prestador ou chamado não encontrado.")
+    banco.add(AtendimentoPrestador(prestador_id=prestador.id, ocorrencia_id=ocorrencia.id, observacao=dados.observacao))
+    try: banco.commit()
+    except IntegrityError:
+        banco.rollback(); raise HTTPException(409, "Este prestador já está vinculado ao chamado.")
+    return _prestador_resposta(prestador, banco)
 
 
 @app.get("/me")
