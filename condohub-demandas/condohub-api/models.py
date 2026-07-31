@@ -148,6 +148,22 @@ class HistoricoPedidoCompra(Base):
     criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
 
 
+class Compra(Base):
+    __tablename__ = "compras"
+    id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(Integer, ForeignKey("condominios.id", ondelete="CASCADE"), nullable=False, index=True)
+    pedido_id = Column(Integer, ForeignKey("pedidos_compra.id", ondelete="SET NULL"), nullable=True, index=True)
+    item = Column(String(160), nullable=False)
+    quantidade = Column(Numeric(12, 3), nullable=False)
+    unidade = Column(String(30), nullable=False)
+    fornecedor = Column(String(160), nullable=True)
+    valor_total = Column(Numeric(12, 2), nullable=False)
+    observacao = Column(Text, nullable=True)
+    comprado_por_id = Column(String(255), nullable=False)
+    comprado_por_nome = Column(String(160), nullable=False)
+    data_compra = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
 class ItemEstoque(Base):
     __tablename__ = "itens_estoque"
     id = Column(Integer, primary_key=True, index=True)

@@ -12,6 +12,15 @@ CREATE TABLE IF NOT EXISTS historico_pedidos_compra (
  criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS ix_historico_pedidos_pedido_id ON historico_pedidos_compra(pedido_id);
+CREATE TABLE IF NOT EXISTS compras (
+ id SERIAL PRIMARY KEY, condominio_id INTEGER NOT NULL REFERENCES condominios(id) ON DELETE CASCADE,
+ pedido_id INTEGER REFERENCES pedidos_compra(id) ON DELETE SET NULL, item VARCHAR(160) NOT NULL,
+ quantidade NUMERIC(12,3) NOT NULL, unidade VARCHAR(30) NOT NULL, fornecedor VARCHAR(160),
+ valor_total NUMERIC(12,2) NOT NULL, observacao TEXT, comprado_por_id VARCHAR(255) NOT NULL,
+ comprado_por_nome VARCHAR(160) NOT NULL, data_compra TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_compras_condominio_id ON compras(condominio_id);
+CREATE INDEX IF NOT EXISTS ix_compras_pedido_id ON compras(pedido_id);
 CREATE TABLE IF NOT EXISTS itens_estoque (
  id SERIAL PRIMARY KEY, condominio_id INTEGER NOT NULL REFERENCES condominios(id) ON DELETE CASCADE,
  nome VARCHAR(160) NOT NULL, unidade VARCHAR(30) NOT NULL, quantidade NUMERIC(12,3) NOT NULL DEFAULT 0,

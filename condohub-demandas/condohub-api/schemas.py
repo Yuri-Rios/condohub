@@ -157,6 +157,16 @@ class PedidoCompraStatus(BaseModel):
         return valor
 
 
+class CompraCriar(BaseModel):
+    pedido_id: int | None = None
+    item: str = Field(min_length=2, max_length=160)
+    quantidade: float = Field(gt=0)
+    unidade: str = Field(min_length=1, max_length=30)
+    fornecedor: str | None = Field(default=None, max_length=160)
+    valor_total: float = Field(ge=0)
+    observacao: str | None = Field(default=None, max_length=2000)
+
+
 class ItemEstoqueCriar(BaseModel):
     nome: str = Field(min_length=2, max_length=160)
     unidade: str = Field(min_length=1, max_length=30)

@@ -29,6 +29,7 @@ from migrations_runner import aplicar_migracoes_multitenant
 from models import (
     AdministradorPlataforma,
     Condominio,
+    Compra,
     FUSO_BRASIL,
     MembroCondominio,
     MensagemOcorrencia,
@@ -45,6 +46,7 @@ from models import (
 )
 from schemas import (
     CondominioCriar,
+    CompraCriar,
     OcorrenciaCriar,
     OcorrenciaDetalhe,
     OcorrenciaResposta,
@@ -747,6 +749,35 @@ def alterar_status_pedido(pedido_id: int, dados: PedidoCompraStatus, banco: Sess
                                     autor_id=usuario.id, autor_nome=usuario.nome))
     banco.commit(); banco.refresh(pedido)
     return _pedido_resposta(pedido, banco, usuario)
+
+
+@app.get("/compras")
+def listar_compras(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    compras = banco.query(Compra).filter(Compra.condominio_id == usuario.condominio_id).order_by(Compra.id.desc()).all()
+    return [{"id": c.id, "pedido_id": c.pedido_id, "item": c.item, "quantidade": float(c.quantidade),
+             "unidade": c.unidade, "fornecedor": c.fornecedor, "valor_total": float(c.valor_total),
+             "observacao": c.observacao, "comprado_por_nome": c.comprado_por_nome, "data_compra": c.data_compra}
+            for c in compras]
+
+
+@app.post("/compras", status_code=201)
+def registrar_compra(dados: CompraCriar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_aprovador)):
+    pedido = None
+    if dados.pedido_id is not None:
+        pedido = banco.query(PedidoCompra).filter(PedidoCompra.id == dados.pedido_id, PedidoCompra.condominio_id == usuario.condominio_id).first()
+        if not pedido: raise HTTPException(422, "Pedido de compra inválido.")
+    compra = Compra(condominio_id=usuario.condominio_id, pedido_id=dados.pedido_id, item=dados.item.strip(),
+                    quantidade=dados.quantidade, unidade=dados.unidade.strip(), fornecedor=dados.fornecedor,
+                    valor_total=dados.valor_total, observacao=dados.observacao, comprado_por_id=usuario.id,
+                    comprado_por_nome=usuario.nome)
+    banco.add(compra)
+    if pedido and pedido.status != "comprado":
+        pedido.status = "comprado"; pedido.atualizado_em = datetime.now(FUSO_BRASIL)
+        banco.add(HistoricoPedidoCompra(pedido_id=pedido.id, status="comprado", observacao="Compra registrada.", autor_id=usuario.id, autor_nome=usuario.nome))
+    banco.commit(); banco.refresh(compra)
+    return {"id": compra.id, "pedido_id": compra.pedido_id, "item": compra.item, "quantidade": float(compra.quantidade),
+            "unidade": compra.unidade, "fornecedor": compra.fornecedor, "valor_total": float(compra.valor_total),
+            "observacao": compra.observacao, "comprado_por_nome": compra.comprado_por_nome, "data_compra": compra.data_compra}
 
 
 def _item_estoque_resposta(item: ItemEstoque, banco: Session):
