@@ -709,13 +709,17 @@ def _pedido_resposta(pedido: PedidoCompra, banco: Session, usuario: ContextoCond
         .order_by(HistoricoPedidoCompra.criado_em.asc())
         .all()
     )
+    pode_gerenciar = not usuario.papeis.isdisjoint({"sindico", "admin"})
+    pode_editar = pedido.status != "done" and (pedido.solicitante_id == usuario.id or pode_gerenciar)
     return {
         "id": pedido.id, "ocorrencia_id": pedido.ocorrencia_id, "item": pedido.item, "quantidade": float(pedido.quantidade),
         "unidade": pedido.unidade, "justificativa": pedido.justificativa,
         "valor_estimado": float(pedido.valor_estimado) if pedido.valor_estimado is not None else None,
         "status": pedido.status, "solicitante_nome": pedido.solicitante_nome,
         "criado_em": pedido.criado_em, "atualizado_em": pedido.atualizado_em,
-        "pode_gerenciar": not usuario.papeis.isdisjoint({"sindico", "admin"}),
+        "pode_gerenciar": pode_gerenciar,
+        "pode_editar": pode_editar,
+        "pode_excluir": pode_editar,
         "historico": [{"id": h.id, "status": h.status, "observacao": h.observacao,
                        "autor_nome": h.autor_nome, "criado_em": h.criado_em} for h in historico],
     }
@@ -738,6 +742,35 @@ def criar_pedido_compra(dados: PedidoCompraCriar, banco: Session = Depends(pegar
     banco.add(HistoricoPedidoCompra(pedido_id=pedido.id, status="create", observacao="Pedido criado.", autor_id=usuario.id, autor_nome=usuario.nome))
     banco.commit(); banco.refresh(pedido)
     return _pedido_resposta(pedido, banco, usuario)
+
+
+@app.put("/pedidos-compra/{pedido_id}")
+def editar_pedido_compra(pedido_id: int, dados: PedidoCompraCriar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    pedido = banco.query(PedidoCompra).filter(PedidoCompra.id == pedido_id, PedidoCompra.condominio_id == usuario.condominio_id).first()
+    if not pedido: raise HTTPException(404, "Pedido não encontrado.")
+    pode_gerenciar = not usuario.papeis.isdisjoint({"sindico", "admin"})
+    if pedido.status == "done" or (pedido.solicitante_id != usuario.id and not pode_gerenciar):
+        raise HTTPException(403, "Você não pode editar este pedido.")
+    if dados.ocorrencia_id and not banco.query(Ocorrencia).filter(Ocorrencia.id == dados.ocorrencia_id, Ocorrencia.condominio_id == usuario.condominio_id).first():
+        raise HTTPException(422, "Chamado inválido.")
+    pedido.ocorrencia_id = dados.ocorrencia_id; pedido.item = dados.item.strip()
+    pedido.quantidade = dados.quantidade; pedido.unidade = dados.unidade.strip()
+    pedido.justificativa = dados.justificativa.strip(); pedido.valor_estimado = dados.valor_estimado
+    pedido.atualizado_em = datetime.now(FUSO_BRASIL)
+    banco.add(HistoricoPedidoCompra(pedido_id=pedido.id, status=pedido.status, observacao="Dados do pedido editados.", autor_id=usuario.id, autor_nome=usuario.nome))
+    banco.commit(); banco.refresh(pedido)
+    return _pedido_resposta(pedido, banco, usuario)
+
+
+@app.delete("/pedidos-compra/{pedido_id}", status_code=204)
+def excluir_pedido_compra(pedido_id: int, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    pedido = banco.query(PedidoCompra).filter(PedidoCompra.id == pedido_id, PedidoCompra.condominio_id == usuario.condominio_id).first()
+    if not pedido: raise HTTPException(404, "Pedido não encontrado.")
+    pode_gerenciar = not usuario.papeis.isdisjoint({"sindico", "admin"})
+    if pedido.status == "done": raise HTTPException(422, "Pedidos concluídos não podem ser excluídos porque já movimentaram o estoque.")
+    if pedido.solicitante_id != usuario.id and not pode_gerenciar:
+        raise HTTPException(403, "Você não pode excluir este pedido.")
+    banco.delete(pedido); banco.commit()
 
 
 @app.patch("/pedidos-compra/{pedido_id}/status")
