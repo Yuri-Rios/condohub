@@ -4,8 +4,8 @@ import { useState, type FormEvent } from "react";
 
 import Titulo from "@/components/Titulo";
 import Input from "@/components/Input";
-import Textarea from "@/components/Textarea";
 import Navbar from "@/components/Navbar";
+import CampoComReferencias from "@/components/CampoComReferencias";
 
 export default function NovaOcorrenciaPage() {
   const [titulo, setTitulo] = useState("");
@@ -75,12 +75,9 @@ export default function NovaOcorrenciaPage() {
           onChange={setLocal}
         />
 
-        <Textarea
-          label="Descrição"
-          placeholder="Descreva o problema com detalhes para facilitar o atendimento."
-          value={descricao}
-          onChange={setDescricao}
-        />
+        <label className="block text-sm font-semibold text-slate-700">Descrição
+          <CampoComReferencias rows={5} placeholder="Descreva o problema. Use # para chamados, @ para pessoas e $ para pedidos." value={descricao} onChange={setDescricao} className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 font-normal text-slate-900 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" />
+        </label>
 
         <button
           type="submit"

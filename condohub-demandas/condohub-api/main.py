@@ -933,6 +933,48 @@ def listar_moradores(
     ]
 
 
+@app.get("/referencias")
+def listar_referencias(
+    banco: Session = Depends(pegar_banco),
+    usuario: ContextoCondominio = Depends(contexto_condominio),
+):
+    pessoas = banco.query(MembroCondominio).filter(
+        MembroCondominio.condominio_id == usuario.condominio_id,
+        MembroCondominio.status == "ativo",
+    ).order_by(MembroCondominio.nome.asc()).all()
+    chamados = banco.query(Ocorrencia).filter(
+        Ocorrencia.condominio_id == usuario.condominio_id,
+    ).order_by(Ocorrencia.id.desc()).all()
+    pedidos = banco.query(PedidoCompra).filter(
+        PedidoCompra.condominio_id == usuario.condominio_id,
+    ).order_by(PedidoCompra.id.desc()).all()
+    return {
+        "pessoas": [{"id": p.id, "nome": p.nome, "avatar_url": p.avatar_url} for p in pessoas],
+        "chamados": [{"id": c.id, "nome": c.titulo} for c in chamados],
+        "pedidos": [{"id": p.id, "nome": p.item} for p in pedidos],
+    }
+
+
+@app.get("/pessoas/{membro_id}")
+def obter_pessoa(
+    membro_id: int,
+    banco: Session = Depends(pegar_banco),
+    usuario: ContextoCondominio = Depends(contexto_condominio),
+):
+    membro = banco.query(MembroCondominio).filter(
+        MembroCondominio.id == membro_id,
+        MembroCondominio.condominio_id == usuario.condominio_id,
+        MembroCondominio.status == "ativo",
+    ).first()
+    if not membro:
+        raise HTTPException(404, "Pessoa não encontrada.")
+    return {
+        "id": membro.id, "nome": membro.nome, "avatar_url": membro.avatar_url,
+        "papeis": sorted(p for p in membro.papeis.split(",") if p),
+        "bloco": membro.bloco, "apartamento": membro.apartamento,
+    }
+
+
 @app.get("/condominio-publico")
 def obter_condominio_publico(
     condominio: Condominio = Depends(condominio_publico),

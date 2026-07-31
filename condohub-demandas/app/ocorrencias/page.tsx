@@ -191,6 +191,7 @@ export default function OcorrenciasPage() {
                 return (
                   <Fragment key={ocorrencia.id}>
                     <tr
+                      id={`chamado-${ocorrencia.id}`}
                       onClick={() => setAbertoId(aberto ? null : ocorrencia.id)}
                       className={`group cursor-pointer border-b border-slate-100 hover:bg-blue-50/40 ${aberto ? "bg-blue-50/50" : ""}`}
                     >

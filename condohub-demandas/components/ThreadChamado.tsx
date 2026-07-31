@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import CampoComReferencias from "@/components/CampoComReferencias";
+import TextoComReferencias from "@/components/TextoComReferencias";
 
 type Mensagem = {
   id: number;
@@ -313,12 +315,12 @@ export default function ThreadChamado({
           </div>
           <label className="mt-4 block text-sm font-semibold text-slate-700">
             Descrição
-            <textarea
+            <CampoComReferencias
               value={descricao}
               maxLength={4000}
               required
               rows={5}
-              onChange={(event) => setDescricao(event.target.value)}
+              onChange={setDescricao}
               className="mt-2 w-full resize-y rounded-xl border border-slate-200 px-4 py-3 font-normal outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             />
           </label>
@@ -371,9 +373,7 @@ export default function ThreadChamado({
           <p className="mt-2 text-xs font-semibold text-slate-500">
             Local: {thread.local}
           </p>
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
-            {thread.descricao}
-          </p>
+          <TextoComReferencias texto={thread.descricao} className="mt-2 block text-sm leading-6 text-slate-700" />
         </div>
       </div>
       )}
@@ -404,9 +404,7 @@ export default function ThreadChamado({
                     })}
                   </time>
                 </div>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
-                  {item.conteudo}
-                </p>
+                <TextoComReferencias texto={item.conteudo} className="mt-2 block text-sm leading-6 text-slate-700" />
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {["👍", "❤️", "😂", "👏"].map((emoji) => {
                     const reacao = item.reacoes.find(
@@ -442,10 +440,10 @@ export default function ThreadChamado({
 
       <form onSubmit={responder} className="mt-5 flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
-          <textarea
+          <CampoComReferencias
             ref={campoMensagem}
             value={mensagem}
-            onChange={(event) => setMensagem(event.target.value)}
+            onChange={setMensagem}
             placeholder="Escreva uma mensagem..."
             maxLength={4000}
             className="min-h-12 w-full resize-none rounded-xl border border-slate-200 bg-white py-3 pl-4 pr-12 text-sm outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
