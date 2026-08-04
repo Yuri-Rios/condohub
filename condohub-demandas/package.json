@@ -11,11 +11,15 @@
     "android:open": "cap open android",
     "android:run": "cap run android",
     "android:build": "npm run android:sync && cd android && ./gradlew assembleDebug",
-    "android:bundle": "cap sync android && cd android && ./gradlew bundleRelease"
+    "android:bundle": "cap sync android && cd android && ./gradlew bundleRelease",
+    "ios:sync": "cap sync ios",
+    "ios:open": "cap open ios",
+    "ios:run": "cap run ios"
   },
   "dependencies": {
-    "@capacitor/android": "^8.4.2",
-    "@capacitor/core": "^8.4.2",
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
     "@clerk/nextjs": "^7.6.1",
     "@prisma/client": "^6.19.3",
     "next": "16.2.10",
@@ -24,7 +28,7 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.4.2",
+    "@capacitor/cli": "^8.5.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
