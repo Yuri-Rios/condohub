@@ -4,6 +4,10 @@ export default clerkMiddleware(async (auth, request) => {
   const caminho = request.nextUrl.pathname;
   const solicitacaoPublica =
     caminho === "/solicitar-acesso" ||
+    caminho === "/privacidade" ||
+    caminho === "/suporte" ||
+    caminho === "/excluir-conta" ||
+    caminho === "/conta-excluida" ||
     caminho.startsWith("/cadastro") ||
     caminho === "/api/health" ||
     (caminho === "/api/solicitacoes" && request.method === "POST");

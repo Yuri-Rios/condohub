@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from fastapi.middleware.cors import CORSMiddleware
 
-from auth import PAPEIS_COM_IDENTIDADE_DOS_CHAMADOS
+from auth import PAPEIS_COM_IDENTIDADE_DOS_CHAMADOS, UsuarioAutenticado, usuario_atual
 from tenant import (
     ContextoCondominio,
     condominio_publico,
@@ -900,6 +900,90 @@ def meus_dados(
             "nome": usuario.condominio_nome,
         },
     }
+
+
+@app.delete("/me/dados", status_code=204)
+def excluir_meus_dados(
+    banco: Session = Depends(pegar_banco),
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    """Remove dados pessoais antes da exclusão definitiva no provedor de login."""
+    perfil = buscar_perfil_clerk(usuario.id)
+    identificador_anonimo = "usuario_excluido"
+    nome_anonimo = "Usuário excluído"
+
+    banco.query(ReacaoMensagem).filter(
+        ReacaoMensagem.usuario_id == usuario.id
+    ).delete(synchronize_session=False)
+    banco.query(ReservaAmbiente).filter(
+        ReservaAmbiente.morador_id == usuario.id
+    ).delete(synchronize_session=False)
+    banco.query(MembroCondominio).filter(
+        MembroCondominio.clerk_user_id == usuario.id
+    ).delete(synchronize_session=False)
+    banco.query(AdministradorPlataforma).filter(
+        AdministradorPlataforma.clerk_user_id == usuario.id
+    ).delete(synchronize_session=False)
+
+    if perfil.email:
+        banco.query(SolicitacaoAcesso).filter(
+            SolicitacaoAcesso.email == perfil.email
+        ).delete(synchronize_session=False)
+
+    banco.query(SolicitacaoAcesso).filter(
+        SolicitacaoAcesso.decidido_por == usuario.id
+    ).update(
+        {SolicitacaoAcesso.decidido_por: None},
+        synchronize_session=False,
+    )
+    banco.query(Ocorrencia).filter(Ocorrencia.autor_id == usuario.id).update(
+        {
+            Ocorrencia.autor_id: None,
+            Ocorrencia.autor_nome: nome_anonimo,
+            Ocorrencia.autor_avatar_url: None,
+        },
+        synchronize_session=False,
+    )
+    banco.query(MensagemOcorrencia).filter(
+        MensagemOcorrencia.autor_id == usuario.id
+    ).update(
+        {
+            MensagemOcorrencia.autor_id: identificador_anonimo,
+            MensagemOcorrencia.autor_nome: nome_anonimo,
+            MensagemOcorrencia.autor_avatar_url: None,
+            MensagemOcorrencia.autor_papeis: "",
+        },
+        synchronize_session=False,
+    )
+    banco.query(PedidoCompra).filter(
+        PedidoCompra.solicitante_id == usuario.id
+    ).update(
+        {
+            PedidoCompra.solicitante_id: identificador_anonimo,
+            PedidoCompra.solicitante_nome: nome_anonimo,
+        },
+        synchronize_session=False,
+    )
+    banco.query(HistoricoPedidoCompra).filter(
+        HistoricoPedidoCompra.autor_id == usuario.id
+    ).update(
+        {
+            HistoricoPedidoCompra.autor_id: identificador_anonimo,
+            HistoricoPedidoCompra.autor_nome: nome_anonimo,
+        },
+        synchronize_session=False,
+    )
+    banco.query(MovimentoEstoque).filter(
+        MovimentoEstoque.autor_id == usuario.id
+    ).update(
+        {
+            MovimentoEstoque.autor_id: identificador_anonimo,
+            MovimentoEstoque.autor_nome: nome_anonimo,
+        },
+        synchronize_session=False,
+    )
+    banco.commit()
+    return None
 
 
 @app.get("/condominios")

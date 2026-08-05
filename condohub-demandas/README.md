@@ -78,6 +78,16 @@ O `.aab` de release precisa ser assinado com uma chave de upload antes de ser
 aceito pelo Play Console. Não versione arquivos `.jks`, `.keystore` ou suas
 senhas.
 
+## Privacidade e publicação nas lojas
+
+O app disponibiliza publicamente `/privacidade`, `/suporte` e
+`/excluir-conta`. Usuários autenticados podem excluir a conta em `/conta`; o
+fluxo remove a identidade no Clerk, apaga dados pessoais dispensáveis e
+anonimiza registros operacionais compartilhados no banco.
+
+Antes de publicar, configure `NEXT_PUBLIC_SUPPORT_EMAIL`, faça deploy conjunto
+do frontend e da API e siga o checklist em `docs/app-store-review.md`.
+
 ## Autenticação, condomínios e papéis
 
 O frontend usa Clerk e a API FastAPI valida o mesmo token antes de ler ou
