@@ -8,6 +8,7 @@ MIGRACOES_MULTITENANT = (
     "007_admin_plataforma.sql",
     "008_avatar_membros.sql",
     "009_compras_estoque_prestadores.sql",
+    "010_notificacoes_ocorrencias.sql",
 )
 
 

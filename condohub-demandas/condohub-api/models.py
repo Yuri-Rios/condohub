@@ -98,6 +98,29 @@ class MensagemOcorrencia(Base):
     criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
 
 
+class NotificacaoOcorrencia(Base):
+    __tablename__ = "notificacoes_ocorrencia"
+
+    id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(
+        Integer,
+        ForeignKey("condominios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    ocorrencia_id = Column(
+        Integer,
+        ForeignKey("ocorrencias.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    destinatario_id = Column(String(255), nullable=False, index=True)
+    tipo = Column(String(30), nullable=False)
+    ator_id = Column(String(255), nullable=False)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+    lida_em = Column(DateTime(timezone=True), nullable=True, index=True)
+
+
 class ReacaoMensagem(Base):
     __tablename__ = "reacoes_mensagem"
     __table_args__ = (

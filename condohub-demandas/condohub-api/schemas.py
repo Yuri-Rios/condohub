@@ -71,6 +71,7 @@ class OcorrenciaResposta(BaseModel):
     data_solicitacao: datetime
     autor_nome: str | None = None
     pode_editar: bool = False
+    nao_lidas: int = 0
 
     class Config:
         from_attributes = True

@@ -41,6 +41,7 @@ export default function Navbar() {
     ["sindico", "admin"].includes(papel),
   );
   const [pendentes, setPendentes] = useState(0);
+  const [atualizacoesChamados, setAtualizacoesChamados] = useState(0);
   const [condominios, setCondominios] = useState<CondominioDisponivel[]>([]);
   const [menuAberto, setMenuAberto] = useState(false);
 
@@ -63,9 +64,33 @@ export default function Navbar() {
       });
   }, [podeAdministrar]);
 
+  useEffect(() => {
+    let ativo = true;
+    async function carregarNotificacoes() {
+      const resposta = await fetch("/api/notificacoes", { cache: "no-store" });
+      if (!resposta.ok || !ativo) return;
+      const dados = (await resposta.json()) as { quantidade: number };
+      setAtualizacoesChamados(dados.quantidade);
+    }
+
+    void carregarNotificacoes();
+    const intervalo = window.setInterval(() => void carregarNotificacoes(), 30_000);
+    const atualizar = () => void carregarNotificacoes();
+    window.addEventListener("condohub:notificacoes-atualizadas", atualizar);
+    return () => {
+      ativo = false;
+      window.clearInterval(intervalo);
+      window.removeEventListener("condohub:notificacoes-atualizadas", atualizar);
+    };
+  }, [acesso?.condominio.id]);
+
   const itensAtendimento: ItemMenu[] = [
     { href: "/nova-ocorrencia", label: "Novo chamado" },
-    { href: "/ocorrencias", label: "Chamados" },
+    {
+      href: "/ocorrencias",
+      label: "Chamados",
+      badge: atualizacoesChamados,
+    },
     ...(podeAgendar
       ? [{ href: "/agendamentos", label: "Agendamentos" }]
       : []),
@@ -156,9 +181,14 @@ export default function Navbar() {
           </Link>
           <Link
             href="/ocorrencias"
-            className={`whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold ${classeLink("/ocorrencias")}`}
+            className={`flex items-center whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold ${classeLink("/ocorrencias")}`}
           >
             Chamados
+            {atualizacoesChamados > 0 && (
+              <span className="ml-2 rounded-full bg-rose-500 px-2 py-0.5 text-xs text-white">
+                {atualizacoesChamados}
+              </span>
+            )}
           </Link>
         </div>
 

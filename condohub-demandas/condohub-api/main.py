@@ -7,6 +7,7 @@ from enum import Enum
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -36,6 +37,7 @@ from models import (
     HistoricoPedidoCompra,
     ItemEstoque,
     MovimentoEstoque,
+    NotificacaoOcorrencia,
     Ocorrencia,
     PedidoCompra,
     PrestadorServico,
@@ -345,6 +347,19 @@ def listar_ocorrencias(
     pode_ver_autor = not usuario.papeis.isdisjoint(
         PAPEIS_COM_IDENTIDADE_DOS_CHAMADOS
     )
+    contagens_nao_lidas = dict(
+        banco.query(
+            NotificacaoOcorrencia.ocorrencia_id,
+            func.count(NotificacaoOcorrencia.id),
+        )
+        .filter(
+            NotificacaoOcorrencia.condominio_id == usuario.condominio_id,
+            NotificacaoOcorrencia.destinatario_id == usuario.id,
+            NotificacaoOcorrencia.lida_em.is_(None),
+        )
+        .group_by(NotificacaoOcorrencia.ocorrencia_id)
+        .all()
+    )
     return [
         {
             "id": item.id,
@@ -355,6 +370,7 @@ def listar_ocorrencias(
             "data_solicitacao": item.data_solicitacao,
             "autor_nome": item.autor_nome if pode_ver_autor else None,
             "pode_editar": item.autor_id == usuario.id,
+            "nao_lidas": contagens_nao_lidas.get(item.id, 0),
         }
         for item in ocorrencias
     ]
@@ -377,6 +393,13 @@ def criar_ocorrencia(
     )
 
     banco.add(nova_ocorrencia)
+    banco.flush()
+    _criar_notificacoes_ocorrencia(
+        banco,
+        nova_ocorrencia,
+        usuario.id,
+        "novo_chamado",
+    )
     banco.commit()
     banco.refresh(nova_ocorrencia)
 
@@ -389,7 +412,95 @@ def criar_ocorrencia(
         "data_solicitacao": nova_ocorrencia.data_solicitacao,
         "autor_nome": None,
         "pode_editar": True,
+        "nao_lidas": 0,
     }
+
+
+PAPEIS_NOTIFICADOS_CHAMADOS = {"sindico", "subsindico", "admin"}
+
+
+def _criar_notificacoes_ocorrencia(
+    banco: Session,
+    ocorrencia: Ocorrencia,
+    ator_id: str,
+    tipo: str,
+):
+    destinatarios = {
+        membro.clerk_user_id
+        for membro in banco.query(MembroCondominio)
+        .filter(
+            MembroCondominio.condominio_id == ocorrencia.condominio_id,
+            MembroCondominio.status == "ativo",
+        )
+        .all()
+        if not set(membro.papeis.split(",")).isdisjoint(
+            PAPEIS_NOTIFICADOS_CHAMADOS
+        )
+    }
+    if ocorrencia.autor_id:
+        destinatarios.add(ocorrencia.autor_id)
+    destinatarios.discard(ator_id)
+
+    for destinatario_id in destinatarios:
+        banco.add(
+            NotificacaoOcorrencia(
+                condominio_id=ocorrencia.condominio_id,
+                ocorrencia_id=ocorrencia.id,
+                destinatario_id=destinatario_id,
+                tipo=tipo,
+                ator_id=ator_id,
+            )
+        )
+
+
+@app.get("/notificacoes-ocorrencias/contagem")
+def contar_notificacoes_ocorrencias(
+    banco: Session = Depends(pegar_banco),
+    usuario: ContextoCondominio = Depends(contexto_condominio),
+):
+    quantidade = (
+        banco.query(NotificacaoOcorrencia)
+        .filter(
+            NotificacaoOcorrencia.condominio_id == usuario.condominio_id,
+            NotificacaoOcorrencia.destinatario_id == usuario.id,
+            NotificacaoOcorrencia.lida_em.is_(None),
+        )
+        .count()
+    )
+    return {"quantidade": quantidade}
+
+
+@app.post("/ocorrencias/{ocorrencia_id}/marcar-lida")
+def marcar_ocorrencia_lida(
+    ocorrencia_id: int,
+    banco: Session = Depends(pegar_banco),
+    usuario: ContextoCondominio = Depends(contexto_condominio),
+):
+    ocorrencia = (
+        banco.query(Ocorrencia)
+        .filter(
+            Ocorrencia.id == ocorrencia_id,
+            Ocorrencia.condominio_id == usuario.condominio_id,
+        )
+        .first()
+    )
+    if not ocorrencia:
+        raise HTTPException(status_code=404, detail="Chamado não encontrado.")
+
+    atualizadas = (
+        banco.query(NotificacaoOcorrencia)
+        .filter(
+            NotificacaoOcorrencia.ocorrencia_id == ocorrencia_id,
+            NotificacaoOcorrencia.destinatario_id == usuario.id,
+            NotificacaoOcorrencia.lida_em.is_(None),
+        )
+        .update(
+            {NotificacaoOcorrencia.lida_em: datetime.now(FUSO_BRASIL)},
+            synchronize_session=False,
+        )
+    )
+    banco.commit()
+    return {"atualizadas": atualizadas}
 
 
 def _mensagem_resposta(
@@ -522,6 +633,12 @@ def criar_mensagem(
         autor_papeis=",".join(sorted(usuario.papeis)),
     )
     banco.add(mensagem)
+    _criar_notificacoes_ocorrencia(
+        banco,
+        ocorrencia,
+        usuario.id,
+        "nova_mensagem",
+    )
     banco.commit()
     banco.refresh(mensagem)
     return _mensagem_resposta(mensagem)
@@ -560,7 +677,15 @@ def alterar_status_ocorrencia(
             detail="Você não pode alterar o status deste chamado.",
         )
 
+    status_anterior = ocorrencia.status
     ocorrencia.status = dados.status
+    if status_anterior != dados.status:
+        _criar_notificacoes_ocorrencia(
+            banco,
+            ocorrencia,
+            usuario.id,
+            "status_alterado",
+        )
     banco.commit()
     banco.refresh(ocorrencia)
     return {
@@ -916,6 +1041,15 @@ def excluir_meus_dados(
     banco.query(ReacaoMensagem).filter(
         ReacaoMensagem.usuario_id == usuario.id
     ).delete(synchronize_session=False)
+    banco.query(NotificacaoOcorrencia).filter(
+        NotificacaoOcorrencia.destinatario_id == usuario.id
+    ).delete(synchronize_session=False)
+    banco.query(NotificacaoOcorrencia).filter(
+        NotificacaoOcorrencia.ator_id == usuario.id
+    ).update(
+        {NotificacaoOcorrencia.ator_id: identificador_anonimo},
+        synchronize_session=False,
+    )
     banco.query(ReservaAmbiente).filter(
         ReservaAmbiente.morador_id == usuario.id
     ).delete(synchronize_session=False)

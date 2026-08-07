@@ -16,6 +16,7 @@ type Ocorrencia = {
   data_solicitacao: string;
   autor_nome: string | null;
   pode_editar: boolean;
+  nao_lidas: number;
   status: "novo" | "em_andamento" | "em_espera" | "fechado";
 };
 
@@ -68,6 +69,29 @@ export default function OcorrenciasPage() {
   const [excluindoId, setExcluindoId] = useState<number | null>(null);
   const acesso = useAcesso();
   const podeExcluir = acesso?.papeis.includes("admin") ?? false;
+
+  async function alternarChamado(ocorrencia: Ocorrencia) {
+    if (abertoId === ocorrencia.id) {
+      setAbertoId(null);
+      return;
+    }
+
+    setAbertoId(ocorrencia.id);
+    if (ocorrencia.nao_lidas === 0) return;
+
+    const resposta = await fetch(
+      `/api/ocorrencias/${ocorrencia.id}/marcar-lida`,
+      { method: "POST" },
+    );
+    if (!resposta.ok) return;
+
+    setOcorrencias((atuais) =>
+      atuais.map((item) =>
+        item.id === ocorrencia.id ? { ...item, nao_lidas: 0 } : item,
+      ),
+    );
+    window.dispatchEvent(new Event("condohub:notificacoes-atualizadas"));
+  }
 
   async function excluirOcorrencia(id: number, titulo: string) {
     const confirmou = window.confirm(
@@ -192,8 +216,8 @@ export default function OcorrenciasPage() {
                   <Fragment key={ocorrencia.id}>
                     <tr
                       id={`chamado-${ocorrencia.id}`}
-                      onClick={() => setAbertoId(aberto ? null : ocorrencia.id)}
-                      className={`group cursor-pointer border-b border-slate-100 hover:bg-blue-50/40 ${aberto ? "bg-blue-50/50" : ""}`}
+                      onClick={() => void alternarChamado(ocorrencia)}
+                      className={`group cursor-pointer border-b border-slate-100 hover:bg-blue-50/40 ${aberto ? "bg-blue-50/50" : ocorrencia.nao_lidas > 0 ? "bg-amber-50/40" : ""}`}
                     >
                       <td className="px-5 py-4 font-mono text-sm text-slate-500">#{String(ocorrencia.id).padStart(4, "0")}</td>
                       <td className="px-5 py-4">
@@ -207,6 +231,11 @@ export default function OcorrenciasPage() {
                               </p>
                             )}
                           </div>
+                          {ocorrencia.nao_lidas > 0 && (
+                            <span className="rounded-full bg-rose-500 px-2 py-0.5 text-xs font-bold text-white">
+                              {ocorrencia.nao_lidas}
+                            </span>
+                          )}
                           {podeExcluir && (
                             <button
                               type="button"
