@@ -6,6 +6,8 @@ import Navbar from "@/components/Navbar";
 import Titulo from "@/components/Titulo";
 import { useAcesso } from "@/src/hooks/useAcesso";
 
+const URL_PUBLICA = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+
 type Solicitacao = {
   id: number;
   nome: string;
@@ -25,8 +27,8 @@ export default function SolicitacoesPage() {
   const [processando, setProcessando] = useState<number | null>(null);
   const [linkCopiado, setLinkCopiado] = useState(false);
 
-  const linkConvite = acesso?.condominio
-    ? `/c/${encodeURIComponent(acesso.condominio.slug)}`
+  const linkConvite = acesso?.condominio && URL_PUBLICA
+    ? `${URL_PUBLICA}/c/${encodeURIComponent(acesso.condominio.slug)}`
     : "";
 
   const carregar = useCallback(async () => {
@@ -56,8 +58,7 @@ export default function SolicitacoesPage() {
 
   async function copiarLink() {
     if (!linkConvite) return;
-    const enderecoCompleto = new URL(linkConvite, window.location.origin).toString();
-    await navigator.clipboard.writeText(enderecoCompleto);
+    await navigator.clipboard.writeText(linkConvite);
     setLinkCopiado(true);
     window.setTimeout(() => setLinkCopiado(false), 2_000);
   }
@@ -101,7 +102,7 @@ export default function SolicitacoesPage() {
       </div>
       {erro && <p className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800">{erro}</p>}
 
-      {acesso?.condominio && (
+      {acesso?.condominio && URL_PUBLICA && (
         <section className="mt-8 rounded-2xl border border-blue-200 bg-blue-50 p-5 sm:p-6">
           <p className="text-sm font-bold uppercase tracking-wider text-blue-700">
             Link para novos moradores
