@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import Navbar from "@/components/Navbar";
 import Titulo from "@/components/Titulo";
+import { useAcesso } from "@/src/hooks/useAcesso";
 
 type Solicitacao = {
   id: number;
@@ -18,9 +19,15 @@ type Solicitacao = {
 };
 
 export default function SolicitacoesPage() {
+  const acesso = useAcesso();
   const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
   const [erro, setErro] = useState("");
   const [processando, setProcessando] = useState<number | null>(null);
+  const [linkCopiado, setLinkCopiado] = useState(false);
+
+  const linkConvite = acesso?.condominio
+    ? `/c/${encodeURIComponent(acesso.condominio.slug)}`
+    : "";
 
   const carregar = useCallback(async () => {
     const resposta = await fetch("/api/solicitacoes");
@@ -46,6 +53,14 @@ export default function SolicitacoesPage() {
         setSolicitacoes(dados);
       });
   }, []);
+
+  async function copiarLink() {
+    if (!linkConvite) return;
+    const enderecoCompleto = new URL(linkConvite, window.location.origin).toString();
+    await navigator.clipboard.writeText(enderecoCompleto);
+    setLinkCopiado(true);
+    window.setTimeout(() => setLinkCopiado(false), 2_000);
+  }
 
   async function decidir(id: number, decisao: "aprovar" | "recusar") {
     const motivo =
@@ -86,7 +101,38 @@ export default function SolicitacoesPage() {
       </div>
       {erro && <p className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800">{erro}</p>}
 
-      <div className="mt-8 space-y-4">
+      {acesso?.condominio && (
+        <section className="mt-8 rounded-2xl border border-blue-200 bg-blue-50 p-5 sm:p-6">
+          <p className="text-sm font-bold uppercase tracking-wider text-blue-700">
+            Link para novos moradores
+          </p>
+          <h2 className="mt-1 text-lg font-bold text-slate-950">
+            Compartilhe o acesso de {acesso.condominio.nome}
+          </h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Envie este endereço para quem precisa solicitar acesso ao condomínio.
+          </p>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <a
+              href={linkConvite}
+              target="_blank"
+              rel="noreferrer"
+              className="min-w-0 flex-1 truncate rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-medium text-blue-800 hover:border-blue-300"
+            >
+              {linkConvite}
+            </a>
+            <button
+              type="button"
+              onClick={() => void copiarLink()}
+              className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              {linkCopiado ? "Link copiado" : "Copiar link"}
+            </button>
+          </div>
+        </section>
+      )}
+
+      <div className="mt-6 space-y-4">
         {solicitacoes.filter((item) => item.status === "pendente").length === 0 ? (
           <div className="rounded-2xl border border-slate-200/80 bg-white p-10 text-center shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
             <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-50 text-xl text-emerald-600">✓</div>

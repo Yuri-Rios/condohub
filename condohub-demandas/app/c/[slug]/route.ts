@@ -17,5 +17,7 @@ export async function GET(
     path: "/",
     maxAge: 60 * 60 * 24 * 365,
   });
-  return Response.redirect(new URL("/ocorrencias", request.url));
+  const destino = new URL("/solicitar-acesso", request.url);
+  destino.searchParams.set("condominio", slug);
+  return Response.redirect(destino);
 }

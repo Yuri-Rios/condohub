@@ -8,6 +8,7 @@ export default clerkMiddleware(async (auth, request) => {
     caminho === "/suporte" ||
     caminho === "/excluir-conta" ||
     caminho === "/conta-excluida" ||
+    caminho.startsWith("/c/") ||
     caminho.startsWith("/cadastro") ||
     caminho === "/api/health" ||
     (caminho === "/api/solicitacoes" && request.method === "POST");

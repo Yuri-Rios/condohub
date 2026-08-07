@@ -14,6 +14,7 @@ export default function SolicitarAcessoPage() {
     useState<CondominioPublico | null>(null);
   const [carregandoCondominio, setCarregandoCondominio] = useState(true);
   const [erroCondominio, setErroCondominio] = useState("");
+  const [tentativaCondominio, setTentativaCondominio] = useState(0);
   const [tipo, setTipo] = useState("morador");
   const [apartamento, setApartamento] = useState("");
   const [erroApartamento, setErroApartamento] = useState("");
@@ -23,10 +24,14 @@ export default function SolicitarAcessoPage() {
   useEffect(() => {
     let ativo = true;
     const controlador = new AbortController();
-    const limite = window.setTimeout(() => controlador.abort(), 10_000);
+    // O proxy do backend pode fazer três tentativas de até cinco segundos,
+    // com pequenos intervalos, enquanto a API sai do modo de espera.
+    const limite = window.setTimeout(() => controlador.abort(), 25_000);
 
     async function carregarCondominio() {
       try {
+        setCarregandoCondominio(true);
+        setErroCondominio("");
         const parametros = new URLSearchParams(window.location.search);
         const slug = parametros.get("condominio") ?? "camila-barbosa";
         const resposta = await fetch(
@@ -69,7 +74,7 @@ export default function SolicitarAcessoPage() {
       window.clearTimeout(limite);
       controlador.abort();
     };
-  }, []);
+  }, [tentativaCondominio]);
 
   async function enviar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -157,9 +162,19 @@ export default function SolicitarAcessoPage() {
               </div>
             </div>
           ) : (
-            <p className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 font-medium text-rose-700">
-              {erroCondominio}
-            </p>
+            <div
+              role="alert"
+              className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 font-medium text-rose-700"
+            >
+              <p>{erroCondominio}</p>
+              <button
+                type="button"
+                onClick={() => setTentativaCondominio((tentativa) => tentativa + 1)}
+                className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm font-semibold hover:bg-rose-100"
+              >
+                Tentar novamente
+              </button>
+            </div>
           )}
           <p className="mt-3 max-w-xl text-base leading-7 text-slate-600">
             Preencha seus dados. A administração confere a solicitação e, após
