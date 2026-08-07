@@ -1,3 +1,4 @@
+import { auth } from "@clerk/nextjs/server";
 import { cookies } from "next/headers";
 
 export async function GET(
@@ -25,7 +26,11 @@ export async function GET(
     );
   }
 
-  const destino = new URL("/solicitar-acesso", urlPublica);
-  destino.searchParams.set("condominio", slug);
+  const { userId } = await auth();
+  const destino = new URL(
+    userId ? "/ocorrencias" : "/solicitar-acesso",
+    urlPublica,
+  );
+  if (!userId) destino.searchParams.set("condominio", slug);
   return Response.redirect(destino);
 }
