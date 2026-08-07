@@ -48,7 +48,15 @@ export async function POST(
   const armazenados = await cookies();
   const condominioSlug =
     armazenados.get("condohub_condominio")?.value ?? "camila-barbosa";
-  const cadastroUrl = new URL("/cadastro", request.url);
+  const urlPublica = process.env.NEXT_PUBLIC_APP_URL;
+  if (!urlPublica) {
+    return Response.json(
+      { detail: "NEXT_PUBLIC_APP_URL não configurada no frontend." },
+      { status: 503 },
+    );
+  }
+
+  const cadastroUrl = new URL("/cadastro", urlPublica);
   cadastroUrl.searchParams.set("condominio", condominioSlug);
   const convite = await client.invitations.createInvitation({
     emailAddress: solicitacao.email,
