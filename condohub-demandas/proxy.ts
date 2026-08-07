@@ -11,6 +11,7 @@ export default clerkMiddleware(async (auth, request) => {
     caminho.startsWith("/c/") ||
     caminho.startsWith("/cadastro") ||
     caminho === "/api/health" ||
+    caminho === "/api/condominio-publico" ||
     (caminho === "/api/solicitacoes" && request.method === "POST");
 
   if (!caminho.startsWith("/entrar") && !solicitacaoPublica) {
