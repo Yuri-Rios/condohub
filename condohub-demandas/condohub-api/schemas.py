@@ -303,3 +303,7 @@ class SolicitacaoConfirmarConvite(BaseModel):
         if not self.invitation_id and not self.clerk_user_id:
             raise ValueError("Informe o convite ou o usuário existente.")
         return self
+
+
+class SolicitacaoAtualizarConvite(BaseModel):
+    invitation_id: str

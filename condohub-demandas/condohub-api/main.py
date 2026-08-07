@@ -63,6 +63,7 @@ from schemas import (
     PrestadorCriar,
     SolicitacaoAcessoCriar,
     SolicitacaoAcessoResposta,
+    SolicitacaoAtualizarConvite,
     SolicitacaoConfirmarConvite,
     SolicitacaoRecusar,
 )
@@ -1287,6 +1288,38 @@ def confirmar_solicitacao(
                     status="ativo",
                 )
             )
+    banco.commit()
+    banco.refresh(solicitacao)
+    return solicitacao
+
+
+@app.post(
+    "/solicitacoes-acesso/{solicitacao_id}/atualizar-convite",
+    response_model=SolicitacaoAcessoResposta,
+)
+def atualizar_convite_solicitacao(
+    solicitacao_id: int,
+    dados: SolicitacaoAtualizarConvite,
+    banco: Session = Depends(pegar_banco),
+    usuario: ContextoCondominio = Depends(exigir_aprovador),
+):
+    solicitacao = (
+        banco.query(SolicitacaoAcesso)
+        .filter(
+            SolicitacaoAcesso.id == solicitacao_id,
+            SolicitacaoAcesso.condominio_id == usuario.condominio_id,
+        )
+        .first()
+    )
+    if not solicitacao:
+        raise HTTPException(status_code=404, detail="Solicitação não encontrada.")
+    if solicitacao.status != "aprovada" or not solicitacao.clerk_invitation_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Esta solicitação não possui um convite para reenviar.",
+        )
+
+    solicitacao.clerk_invitation_id = dados.invitation_id
     banco.commit()
     banco.refresh(solicitacao)
     return solicitacao

@@ -18,6 +18,7 @@ type Solicitacao = {
   observacao: string | null;
   status: string;
   criado_em: string;
+  clerk_invitation_id: string | null;
 };
 
 export default function SolicitacoesPage() {
@@ -26,6 +27,7 @@ export default function SolicitacoesPage() {
   const [erro, setErro] = useState("");
   const [processando, setProcessando] = useState<number | null>(null);
   const [linkCopiado, setLinkCopiado] = useState(false);
+  const [mensagem, setMensagem] = useState("");
 
   const linkConvite = acesso?.condominio && URL_PUBLICA
     ? `${URL_PUBLICA}/c/${encodeURIComponent(acesso.condominio.slug)}`
@@ -87,6 +89,25 @@ export default function SolicitacoesPage() {
     await carregar();
   }
 
+  async function reenviarConvite(id: number) {
+    setProcessando(id);
+    setErro("");
+    setMensagem("");
+    const resposta = await fetch(`/api/solicitacoes/${id}/reenviar`, {
+      method: "POST",
+    });
+    const dados = await resposta.json();
+    setProcessando(null);
+
+    if (!resposta.ok) {
+      setErro(dados.detail ?? "Não foi possível reenviar o convite.");
+      return;
+    }
+
+    setMensagem(`Novo convite enviado para ${dados.email}.`);
+    await carregar();
+  }
+
   return (
     <main className="min-h-screen px-4 py-3 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
@@ -101,6 +122,7 @@ export default function SolicitacoesPage() {
         </div>
       </div>
       {erro && <p className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800">{erro}</p>}
+      {mensagem && <p className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">{mensagem}</p>}
 
       {acesso?.condominio && URL_PUBLICA && (
         <section className="mt-8 rounded-2xl border border-blue-200 bg-blue-50 p-5 sm:p-6">
@@ -190,6 +212,54 @@ export default function SolicitacoesPage() {
             ))
         )}
       </div>
+
+      {solicitacoes.some(
+        (item) => item.status === "aprovada" && item.clerk_invitation_id,
+      ) && (
+        <section className="mt-10">
+          <div>
+            <h2 className="text-xl font-bold text-slate-950">Convites enviados</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Reenvie um convite quando o anterior tiver expirado ou estiver com endereço incorreto.
+            </p>
+          </div>
+          <div className="mt-4 space-y-3">
+            {solicitacoes
+              .filter(
+                (item) =>
+                  item.status === "aprovada" && item.clerk_invitation_id,
+              )
+              .map((item) => (
+                <article
+                  key={item.id}
+                  className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="truncate font-bold text-slate-950">
+                        {item.nome}
+                      </h3>
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                        Aprovado
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-sm text-slate-500">
+                      {item.email}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={processando === item.id}
+                    onClick={() => void reenviarConvite(item.id)}
+                    className="shrink-0 rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {processando === item.id ? "Reenviando..." : "Reenviar convite"}
+                  </button>
+                </article>
+              ))}
+          </div>
+        </section>
+      )}
       </div>
     </main>
   );
