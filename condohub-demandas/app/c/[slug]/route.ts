@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params;
@@ -17,7 +17,15 @@ export async function GET(
     path: "/",
     maxAge: 60 * 60 * 24 * 365,
   });
-  const destino = new URL("/solicitar-acesso", request.url);
+  const urlPublica = process.env.NEXT_PUBLIC_APP_URL;
+  if (!urlPublica) {
+    return Response.json(
+      { detail: "NEXT_PUBLIC_APP_URL não configurada no frontend." },
+      { status: 503 },
+    );
+  }
+
+  const destino = new URL("/solicitar-acesso", urlPublica);
   destino.searchParams.set("condominio", slug);
   return Response.redirect(destino);
 }
