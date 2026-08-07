@@ -22,38 +22,52 @@ export default function SolicitarAcessoPage() {
 
   useEffect(() => {
     let ativo = true;
+    const controlador = new AbortController();
+    const limite = window.setTimeout(() => controlador.abort(), 10_000);
+
     async function carregarCondominio() {
-      const parametros = new URLSearchParams(window.location.search);
-      const slug = parametros.get("condominio") ?? "camila-barbosa";
-      const resposta = await fetch(
-        `/api/condominio-publico?condominio=${encodeURIComponent(slug)}`,
-        { cache: "no-store" },
-      );
-      if (!ativo) return;
-      if (!resposta.ok) {
-        setErroCondominio(
-          resposta.status === 404
-            ? "O condomínio informado não foi encontrado."
-            : "Não foi possível identificar o condomínio.",
+      try {
+        const parametros = new URLSearchParams(window.location.search);
+        const slug = parametros.get("condominio") ?? "camila-barbosa";
+        const resposta = await fetch(
+          `/api/condominio-publico?condominio=${encodeURIComponent(slug)}`,
+          { cache: "no-store", signal: controlador.signal },
         );
-        setCarregandoCondominio(false);
-        return;
-      }
-      const dados = (await resposta.json()) as CondominioPublico;
-      setCondominioAtual(dados);
-      setCarregandoCondominio(false);
-      if (!parametros.has("condominio")) {
-        parametros.set("condominio", dados.slug);
-        window.history.replaceState(
-          null,
-          "",
-          `${window.location.pathname}?${parametros.toString()}`,
-        );
+        if (!ativo) return;
+        if (!resposta.ok) {
+          setErroCondominio(
+            resposta.status === 404
+              ? "O condomínio informado não foi encontrado."
+              : "Não foi possível identificar o condomínio.",
+          );
+          return;
+        }
+        const dados = (await resposta.json()) as CondominioPublico;
+        setCondominioAtual(dados);
+        if (!parametros.has("condominio")) {
+          parametros.set("condominio", dados.slug);
+          window.history.replaceState(
+            null,
+            "",
+            `${window.location.pathname}?${parametros.toString()}`,
+          );
+        }
+      } catch {
+        if (ativo) {
+          setErroCondominio(
+            "Não foi possível identificar o condomínio. Verifique sua conexão e tente novamente.",
+          );
+        }
+      } finally {
+        window.clearTimeout(limite);
+        if (ativo) setCarregandoCondominio(false);
       }
     }
     void carregarCondominio();
     return () => {
       ativo = false;
+      window.clearTimeout(limite);
+      controlador.abort();
     };
   }, []);
 
@@ -153,7 +167,7 @@ export default function SolicitarAcessoPage() {
           </p>
         </div>
 
-        <form onSubmit={enviar} className={`mt-8 space-y-5 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_16px_50px_rgba(15,23,42,0.08)] sm:p-8 ${!condominioAtual ? "pointer-events-none opacity-50" : ""}`}>
+        <form onSubmit={enviar} className="mt-8 space-y-5 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_16px_50px_rgba(15,23,42,0.08)] sm:p-8">
           <label className="block">
             <span className="text-sm font-semibold text-slate-700">Nome completo</span>
             <input name="nome" required placeholder="Como aparece no documento" className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" />
