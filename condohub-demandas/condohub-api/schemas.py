@@ -272,6 +272,27 @@ class EtapaCronogramaStatus(BaseModel):
         return valor
 
 
+class EtapaModeloCronogramaCriar(BaseModel):
+    titulo: str = Field(min_length=2, max_length=160)
+    responsavel_sugerido: str | None = Field(default=None, max_length=160)
+    duracao_dias: int = Field(ge=1, le=365)
+
+
+class ModeloCronogramaCriar(BaseModel):
+    nome: str = Field(min_length=3, max_length=160)
+    categoria: str = Field(min_length=2, max_length=60)
+    objetivo: str = Field(min_length=3, max_length=4000)
+    prioridade: str = "normal"
+    etapas: list[EtapaModeloCronogramaCriar] = Field(min_length=1, max_length=100)
+
+    @field_validator("prioridade")
+    @classmethod
+    def validar_prioridade(cls, valor: str):
+        if valor not in {"normal", "alta", "urgente"}:
+            raise ValueError("Prioridade inválida.")
+        return valor
+
+
 class ReservaCriar(BaseModel):
     ambiente: str
     inicio: datetime

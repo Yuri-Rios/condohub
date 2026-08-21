@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 import Navbar from "@/components/Navbar";
 import Titulo from "@/components/Titulo";
@@ -33,6 +34,11 @@ type Cronograma = {
   }>;
 };
 
+type ModeloCronograma = {
+  id: number; nome: string; categoria: string; objetivo: string; prioridade: string; duracao_total_dias: number;
+  etapas: Array<{ id: number; ordem: number; titulo: string; responsavel_sugerido: string | null; duracao_dias: number }>;
+};
+
 const categorias = ["Inspeção predial", "Obra", "Manutenção", "Pintura", "Renovação", "Segurança", "Outro"];
 
 function etapaVazia(inicio = "", fim = ""): Etapa {
@@ -48,6 +54,10 @@ function dataCurta(valor: string) {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${valor}T12:00:00Z`));
 }
 
+function somarDias(valor: string, dias: number) {
+  const data = new Date(`${valor}T12:00:00Z`); data.setUTCDate(data.getUTCDate() + dias); return data.toISOString().slice(0, 10);
+}
+
 async function detalheErro(resposta: Response) {
   const dados = await resposta.json().catch(() => null);
   if (typeof dados?.detail === "string") return dados.detail;
@@ -59,6 +69,9 @@ export default function CronogramasPage() {
   const [cronogramas, setCronogramas] = useState<Cronograma[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [modalAberto, setModalAberto] = useState(false);
+  const [modalModelos, setModalModelos] = useState(false);
+  const [modelos, setModelos] = useState<ModeloCronograma[]>([]);
+  const [inicioModelo, setInicioModelo] = useState(new Date().toISOString().slice(0, 10));
   const [passo, setPasso] = useState(0);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
@@ -156,6 +169,24 @@ export default function CronogramasPage() {
 
   function enviar(evento: FormEvent) { evento.preventDefault(); if (passo < 2) continuar(); else void salvar("planejado"); }
 
+  async function abrirModelos() {
+    setErro("");
+    const resposta = await fetch("/api/cronogramas/modelos", { cache: "no-store" });
+    if (!resposta.ok) { setErro("Não foi possível carregar os modelos."); return; }
+    setModelos(await resposta.json()); setModalModelos(true);
+  }
+
+  function usarModelo(modelo: ModeloCronograma) {
+    let cursor = inicioModelo;
+    const etapasCalculadas = modelo.etapas.map((etapa) => {
+      const inicio = cursor; const fim = somarDias(inicio, etapa.duracao_dias - 1); cursor = somarDias(fim, 1);
+      return { titulo: etapa.titulo, responsavel: etapa.responsavel_sugerido ?? "", inicio_previsto: inicio, fim_previsto: fim, custo_previsto: "" };
+    });
+    const fim = etapasCalculadas.at(-1)?.fim_previsto ?? inicioModelo;
+    setFormulario({ titulo: modelo.nome, categoria: modelo.categoria, objetivo: modelo.objetivo, responsavel: "", inicio_previsto: inicioModelo, fim_previsto: fim, prioridade: modelo.prioridade, orcamento_previsto: "" });
+    setEtapas(etapasCalculadas); setPasso(0); setModalModelos(false); setModalAberto(true);
+  }
+
   async function atualizarPublicacao(item: Cronograma) {
     setProcessando(`publicacao-${item.id}`); setErro("");
     const resposta = await fetch(`/api/cronogramas/${item.id}/publicacao`, {
@@ -186,7 +217,7 @@ export default function CronogramasPage() {
         <Navbar />
         <div className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
           <Titulo texto="Cronogramas" subtitulo="Planeje atividades, responsáveis, prazos e custos da gestão do condomínio." />
-          <button type="button" onClick={() => setModalAberto(true)} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-blue-700">Novo cronograma</button>
+          <div className="flex flex-wrap gap-2"><Link href="/cronogramas/modelos" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-blue-300 hover:text-blue-700">Gerenciar modelos</Link><button type="button" onClick={() => void abrirModelos()} className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100">Usar modelo</button><button type="button" onClick={() => setModalAberto(true)} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-blue-700">Novo cronograma</button></div>
         </div>
 
         {erro && !modalAberto && <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{erro}</div>}
@@ -249,6 +280,8 @@ export default function CronogramasPage() {
           </form>
         </div>
       </div>}
+
+      {modalModelos && <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/45 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="titulo-modelos"><div className="mx-auto my-8 max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl"><div className="flex items-start justify-between border-b border-slate-200 p-5 sm:px-6"><div><h2 id="titulo-modelos" className="text-xl font-bold text-slate-950">Criar a partir de um modelo</h2><p className="mt-1 text-sm text-slate-500">Escolha a data inicial; as etapas serão calculadas e poderão ser editadas.</p></div><button type="button" onClick={() => setModalModelos(false)} className="rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-100" aria-label="Fechar">✕</button></div><div className="p-5 sm:p-6"><label className="block max-w-xs text-sm font-semibold text-slate-700">Data inicial<input type="date" className="input mt-2" value={inicioModelo} onChange={(e) => setInicioModelo(e.target.value)} /></label>{modelos.length === 0 ? <div className="mt-6 rounded-xl border border-dashed border-slate-300 p-8 text-center"><p className="font-semibold text-slate-800">Nenhum modelo criado</p><Link href="/cronogramas/modelos" className="mt-3 inline-block text-sm font-semibold text-blue-700">Criar o primeiro modelo</Link></div> : <div className="mt-5 grid gap-3 sm:grid-cols-2">{modelos.map((modelo) => <article key={modelo.id} className="rounded-xl border border-slate-200 p-4"><span className="text-xs font-bold uppercase text-blue-600">{modelo.categoria}</span><h3 className="mt-1 font-bold text-slate-900">{modelo.nome}</h3><p className="mt-2 text-sm text-slate-500">{modelo.etapas.length} etapas · {modelo.duracao_total_dias} dias</p><button type="button" disabled={!inicioModelo} onClick={() => usarModelo(modelo)} className="mt-4 w-full rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50">Usar este modelo</button></article>)}</div>}</div></div></div>}
     </main>
   );
 }

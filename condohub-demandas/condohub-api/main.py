@@ -35,8 +35,10 @@ from models import (
     Condominio,
     Cronograma,
     EtapaCronograma,
+    EtapaModeloCronograma,
     FUSO_BRASIL,
     MembroCondominio,
+    ModeloCronograma,
     ModuloCondominio,
     MensagemOcorrencia,
     AtendimentoPrestador,
@@ -59,6 +61,7 @@ from schemas import (
     CronogramaCriar,
     CronogramaPublicacao,
     EtapaCronogramaStatus,
+    ModeloCronogramaCriar,
     OcorrenciaCriar,
     OcorrenciaDetalhe,
     OcorrenciaResposta,
@@ -1344,6 +1347,74 @@ def criar_cronograma(dados: CronogramaCriar, banco: Session = Depends(pegar_banc
     banco.commit()
     banco.refresh(cronograma)
     return _cronograma_resposta(cronograma, banco)
+
+
+def _modelo_cronograma_resposta(modelo: ModeloCronograma, banco: Session):
+    etapas = banco.query(EtapaModeloCronograma).filter(EtapaModeloCronograma.modelo_id == modelo.id).order_by(EtapaModeloCronograma.ordem.asc()).all()
+    return {
+        "id": modelo.id, "nome": modelo.nome, "categoria": modelo.categoria,
+        "objetivo": modelo.objetivo, "prioridade": modelo.prioridade,
+        "criado_por_nome": modelo.criado_por_nome, "criado_em": modelo.criado_em,
+        "duracao_total_dias": sum(etapa.duracao_dias for etapa in etapas),
+        "etapas": [{"id": etapa.id, "ordem": etapa.ordem, "titulo": etapa.titulo,
+                    "responsavel_sugerido": etapa.responsavel_sugerido,
+                    "duracao_dias": etapa.duracao_dias} for etapa in etapas],
+    }
+
+
+@app.get("/cronogramas/modelos")
+def listar_modelos_cronograma(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    modelos = banco.query(ModeloCronograma).filter(ModeloCronograma.condominio_id == usuario.condominio_id).order_by(ModeloCronograma.nome.asc()).all()
+    return [_modelo_cronograma_resposta(modelo, banco) for modelo in modelos]
+
+
+@app.post("/cronogramas/modelos", status_code=201)
+def criar_modelo_cronograma(dados: ModeloCronogramaCriar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    modelo = ModeloCronograma(condominio_id=usuario.condominio_id, nome=dados.nome.strip(), categoria=dados.categoria.strip(),
+                              objetivo=dados.objetivo.strip(), prioridade=dados.prioridade,
+                              criado_por_id=usuario.id, criado_por_nome=usuario.nome)
+    banco.add(modelo)
+    try:
+        banco.flush()
+        for ordem, etapa in enumerate(dados.etapas, start=1):
+            banco.add(EtapaModeloCronograma(modelo_id=modelo.id, ordem=ordem, titulo=etapa.titulo.strip(),
+                                            responsavel_sugerido=etapa.responsavel_sugerido.strip() if etapa.responsavel_sugerido else None,
+                                            duracao_dias=etapa.duracao_dias))
+        banco.commit()
+    except IntegrityError:
+        banco.rollback()
+        raise HTTPException(409, "Já existe um modelo com este nome.")
+    banco.refresh(modelo)
+    return _modelo_cronograma_resposta(modelo, banco)
+
+
+@app.put("/cronogramas/modelos/{modelo_id}")
+def editar_modelo_cronograma(modelo_id: int, dados: ModeloCronogramaCriar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    modelo = banco.query(ModeloCronograma).filter(ModeloCronograma.id == modelo_id, ModeloCronograma.condominio_id == usuario.condominio_id).first()
+    if not modelo:
+        raise HTTPException(404, "Modelo não encontrado.")
+    modelo.nome = dados.nome.strip(); modelo.categoria = dados.categoria.strip()
+    modelo.objetivo = dados.objetivo.strip(); modelo.prioridade = dados.prioridade
+    banco.query(EtapaModeloCronograma).filter(EtapaModeloCronograma.modelo_id == modelo.id).delete(synchronize_session=False)
+    for ordem, etapa in enumerate(dados.etapas, start=1):
+        banco.add(EtapaModeloCronograma(modelo_id=modelo.id, ordem=ordem, titulo=etapa.titulo.strip(),
+                                        responsavel_sugerido=etapa.responsavel_sugerido.strip() if etapa.responsavel_sugerido else None,
+                                        duracao_dias=etapa.duracao_dias))
+    try:
+        banco.commit()
+    except IntegrityError:
+        banco.rollback()
+        raise HTTPException(409, "Já existe um modelo com este nome.")
+    banco.refresh(modelo)
+    return _modelo_cronograma_resposta(modelo, banco)
+
+
+@app.delete("/cronogramas/modelos/{modelo_id}", status_code=204)
+def excluir_modelo_cronograma(modelo_id: int, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    modelo = banco.query(ModeloCronograma).filter(ModeloCronograma.id == modelo_id, ModeloCronograma.condominio_id == usuario.condominio_id).first()
+    if not modelo:
+        raise HTTPException(404, "Modelo não encontrado.")
+    banco.delete(modelo); banco.commit()
 
 
 @app.patch("/cronogramas/{cronograma_id}/publicacao")

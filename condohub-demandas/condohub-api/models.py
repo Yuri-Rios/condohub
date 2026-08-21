@@ -276,6 +276,34 @@ class EtapaCronograma(Base):
     status = Column(String(20), nullable=False, default="planejada")
 
 
+class ModeloCronograma(Base):
+    __tablename__ = "modelos_cronograma"
+    __table_args__ = (
+        UniqueConstraint("condominio_id", "nome", name="uq_modelo_cronograma_nome"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(Integer, ForeignKey("condominios.id", ondelete="CASCADE"), nullable=False, index=True)
+    nome = Column(String(160), nullable=False)
+    categoria = Column(String(60), nullable=False)
+    objetivo = Column(Text, nullable=False)
+    prioridade = Column(String(20), nullable=False, default="normal")
+    criado_por_id = Column(String(255), nullable=False)
+    criado_por_nome = Column(String(160), nullable=False)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
+class EtapaModeloCronograma(Base):
+    __tablename__ = "etapas_modelo_cronograma"
+
+    id = Column(Integer, primary_key=True, index=True)
+    modelo_id = Column(Integer, ForeignKey("modelos_cronograma.id", ondelete="CASCADE"), nullable=False, index=True)
+    ordem = Column(Integer, nullable=False)
+    titulo = Column(String(160), nullable=False)
+    responsavel_sugerido = Column(String(160), nullable=True)
+    duracao_dias = Column(Integer, nullable=False)
+
+
 class ReservaAmbiente(Base):
     __tablename__ = "reservas_ambientes"
     __table_args__ = (
