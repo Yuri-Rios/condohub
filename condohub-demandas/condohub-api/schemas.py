@@ -229,15 +229,6 @@ class CronogramaCriar(BaseModel):
         if valor not in {"normal", "alta", "urgente"}:
             raise ValueError("Prioridade inválida.")
         return valor
-
-
-class ModuloHabilitacao(BaseModel):
-    habilitado: bool
-
-
-class ModuloVisibilidade(BaseModel):
-    visivel_moradores: bool
-
     @field_validator("status")
     @classmethod
     def validar_status(cls, valor: str):
@@ -254,6 +245,14 @@ class ModuloVisibilidade(BaseModel):
         if any(etapa.inicio_previsto < self.inicio_previsto or etapa.fim_previsto > self.fim_previsto for etapa in self.etapas):
             raise ValueError("As etapas precisam estar dentro do período do cronograma.")
         return self
+
+
+class ModuloHabilitacao(BaseModel):
+    habilitado: bool
+
+
+class ModuloVisibilidade(BaseModel):
+    visivel_moradores: bool
 
 
 class CronogramaPublicacao(BaseModel):
