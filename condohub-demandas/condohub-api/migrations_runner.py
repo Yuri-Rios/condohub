@@ -11,6 +11,7 @@ MIGRACOES_MULTITENANT = (
     "010_notificacoes_ocorrencias.sql",
     "011_onedrive_atas.sql",
     "012_cronogramas.sql",
+    "013_acompanhamento_cronogramas.sql",
 )
 
 

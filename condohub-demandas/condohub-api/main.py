@@ -54,6 +54,8 @@ from models import (
 from schemas import (
     CondominioCriar,
     CronogramaCriar,
+    CronogramaPublicacao,
+    EtapaCronogramaStatus,
     OcorrenciaCriar,
     OcorrenciaDetalhe,
     OcorrenciaResposta,
@@ -1251,6 +1253,7 @@ def _cronograma_resposta(cronograma: Cronograma, banco: Session):
         .order_by(EtapaCronograma.ordem.asc())
         .all()
     )
+    concluidas = sum(1 for etapa in etapas if etapa.status == "concluida")
     return {
         "id": cronograma.id,
         "titulo": cronograma.titulo,
@@ -1262,6 +1265,10 @@ def _cronograma_resposta(cronograma: Cronograma, banco: Session):
         "prioridade": cronograma.prioridade,
         "orcamento_previsto": float(cronograma.orcamento_previsto) if cronograma.orcamento_previsto is not None else None,
         "status": cronograma.status,
+        "publicado": cronograma.publicado,
+        "ultima_atualizacao": cronograma.ultima_atualizacao,
+        "atualizado_em": cronograma.atualizado_em,
+        "progresso": round(concluidas * 100 / len(etapas)) if etapas else 0,
         "criado_por_nome": cronograma.criado_por_nome,
         "criado_em": cronograma.criado_em,
         "etapas": [
@@ -1304,6 +1311,7 @@ def criar_cronograma(dados: CronogramaCriar, banco: Session = Depends(pegar_banc
         prioridade=dados.prioridade,
         orcamento_previsto=dados.orcamento_previsto,
         status=dados.status,
+        publicado=False,
         criado_por_id=usuario.id,
         criado_por_nome=usuario.nome,
     )
@@ -1318,10 +1326,67 @@ def criar_cronograma(dados: CronogramaCriar, banco: Session = Depends(pegar_banc
             inicio_previsto=etapa.inicio_previsto,
             fim_previsto=etapa.fim_previsto,
             custo_previsto=etapa.custo_previsto,
+            status="nao_iniciada",
         ))
     banco.commit()
     banco.refresh(cronograma)
     return _cronograma_resposta(cronograma, banco)
+
+
+@app.patch("/cronogramas/{cronograma_id}/publicacao")
+def alterar_publicacao_cronograma(cronograma_id: int, dados: CronogramaPublicacao, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    cronograma = banco.query(Cronograma).filter(Cronograma.id == cronograma_id, Cronograma.condominio_id == usuario.condominio_id).first()
+    if not cronograma:
+        raise HTTPException(404, "Cronograma não encontrado.")
+    if dados.publicado and cronograma.status != "planejado":
+        raise HTTPException(422, "Conclua o planejamento antes de publicar.")
+    cronograma.publicado = dados.publicado
+    if dados.atualizacao is not None:
+        cronograma.ultima_atualizacao = dados.atualizacao.strip() or None
+    cronograma.atualizado_em = datetime.now(FUSO_BRASIL)
+    banco.commit()
+    banco.refresh(cronograma)
+    return _cronograma_resposta(cronograma, banco)
+
+
+@app.patch("/cronogramas/{cronograma_id}/etapas/{etapa_id}")
+def alterar_status_etapa(cronograma_id: int, etapa_id: int, dados: EtapaCronogramaStatus, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    cronograma = banco.query(Cronograma).filter(Cronograma.id == cronograma_id, Cronograma.condominio_id == usuario.condominio_id).first()
+    if not cronograma:
+        raise HTTPException(404, "Cronograma não encontrado.")
+    etapa = banco.query(EtapaCronograma).filter(EtapaCronograma.id == etapa_id, EtapaCronograma.cronograma_id == cronograma.id).first()
+    if not etapa:
+        raise HTTPException(404, "Etapa não encontrada.")
+    etapa.status = dados.status
+    if dados.atualizacao is not None:
+        cronograma.ultima_atualizacao = dados.atualizacao.strip() or None
+    cronograma.atualizado_em = datetime.now(FUSO_BRASIL)
+    banco.commit()
+    banco.refresh(cronograma)
+    return _cronograma_resposta(cronograma, banco)
+
+
+@app.get("/acompanhamento")
+def listar_acompanhamento(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
+    cronogramas = (
+        banco.query(Cronograma)
+        .filter(Cronograma.condominio_id == usuario.condominio_id, Cronograma.publicado.is_(True), Cronograma.status == "planejado")
+        .order_by(Cronograma.fim_previsto.asc(), Cronograma.id.desc())
+        .all()
+    )
+    respostas = []
+    for cronograma in cronogramas:
+        completo = _cronograma_resposta(cronograma, banco)
+        respostas.append({
+            "id": completo["id"], "titulo": completo["titulo"], "categoria": completo["categoria"],
+            "objetivo": completo["objetivo"], "inicio_previsto": completo["inicio_previsto"],
+            "fim_previsto": completo["fim_previsto"], "ultima_atualizacao": completo["ultima_atualizacao"],
+            "atualizado_em": completo["atualizado_em"], "progresso": completo["progresso"],
+            "etapas": [{"id": etapa["id"], "ordem": etapa["ordem"], "titulo": etapa["titulo"],
+                        "inicio_previsto": etapa["inicio_previsto"], "fim_previsto": etapa["fim_previsto"],
+                        "status": etapa["status"]} for etapa in completo["etapas"]],
+        })
+    return respostas
 
 
 @app.post("/prestadores/{prestador_id}/atendimentos", status_code=201)

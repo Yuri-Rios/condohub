@@ -248,6 +248,23 @@ class CronogramaCriar(BaseModel):
         return self
 
 
+class CronogramaPublicacao(BaseModel):
+    publicado: bool
+    atualizacao: str | None = Field(default=None, max_length=2000)
+
+
+class EtapaCronogramaStatus(BaseModel):
+    status: str
+    atualizacao: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("status")
+    @classmethod
+    def validar_status(cls, valor: str):
+        if valor not in {"nao_iniciada", "em_andamento", "concluida", "atrasada", "bloqueada"}:
+            raise ValueError("Situação da etapa inválida.")
+        return valor
+
+
 class ReservaCriar(BaseModel):
     ambiente: str
     inicio: datetime

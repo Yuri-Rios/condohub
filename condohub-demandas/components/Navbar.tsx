@@ -95,6 +95,7 @@ export default function Navbar() {
       ? [{ href: "/agendamentos", label: "Agendamentos" }]
       : []),
     { href: "/atas", label: "Atas" },
+    { href: "/acompanhamento", label: "Acompanhamento" },
   ];
   const itensGestao: ItemMenu[] = podeAdministrar
     ? [

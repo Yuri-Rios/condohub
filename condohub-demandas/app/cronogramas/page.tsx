@@ -24,6 +24,9 @@ type Cronograma = {
   prioridade: "normal" | "alta" | "urgente";
   orcamento_previsto: number | null;
   status: "rascunho" | "planejado";
+  publicado: boolean;
+  ultima_atualizacao: string | null;
+  progresso: number;
   etapas: Array<{
     id: number; ordem: number; status: string; titulo: string; responsavel: string;
     inicio_previsto: string; fim_previsto: string; custo_previsto: number | null;
@@ -60,6 +63,9 @@ export default function CronogramasPage() {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
+  const [gerenciando, setGerenciando] = useState<number | null>(null);
+  const [atualizacao, setAtualizacao] = useState("");
+  const [processando, setProcessando] = useState("");
   const [formulario, setFormulario] = useState({
     titulo: "", categoria: "Inspeção predial", objetivo: "", responsavel: "",
     inicio_previsto: "", fim_previsto: "", prioridade: "normal", orcamento_previsto: "",
@@ -150,6 +156,30 @@ export default function CronogramasPage() {
 
   function enviar(evento: FormEvent) { evento.preventDefault(); if (passo < 2) continuar(); else void salvar("planejado"); }
 
+  async function atualizarPublicacao(item: Cronograma) {
+    setProcessando(`publicacao-${item.id}`); setErro("");
+    const resposta = await fetch(`/api/cronogramas/${item.id}/publicacao`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publicado: !item.publicado, atualizacao: atualizacao || null }),
+    });
+    setProcessando("");
+    if (!resposta.ok) { setErro(await detalheErro(resposta)); return; }
+    setAviso(item.publicado ? "Cronograma ocultado dos condôminos." : "Cronograma publicado para os condôminos.");
+    await carregar();
+  }
+
+  async function atualizarStatus(item: Cronograma, etapaId: number, status: string) {
+    setProcessando(`etapa-${etapaId}`); setErro("");
+    const resposta = await fetch(`/api/cronogramas/${item.id}/etapas/${etapaId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, atualizacao: atualizacao || null }),
+    });
+    setProcessando("");
+    if (!resposta.ok) { setErro(await detalheErro(resposta)); return; }
+    setAviso("Andamento atualizado."); setAtualizacao("");
+    await carregar();
+  }
+
   return (
     <main className="min-h-screen px-4 py-3 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
@@ -159,6 +189,7 @@ export default function CronogramasPage() {
           <button type="button" onClick={() => setModalAberto(true)} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-blue-700">Novo cronograma</button>
         </div>
 
+        {erro && !modalAberto && <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{erro}</div>}
         {aviso && <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{aviso}</div>}
 
         <section className="mb-6 grid gap-3 sm:grid-cols-3">
@@ -175,6 +206,9 @@ export default function CronogramasPage() {
               <div className="flex items-start justify-between gap-3"><div><span className="text-xs font-bold uppercase tracking-wide text-blue-600">{item.categoria}</span><h2 className="mt-1 text-lg font-bold text-slate-950">{item.titulo}</h2></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${item.status === "planejado" ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}>{item.status === "planejado" ? "Planejado" : "Rascunho"}</span></div>
               <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">{item.objetivo}</p>
               <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 text-sm"><div><dt className="text-slate-400">Período</dt><dd className="mt-1 font-semibold text-slate-700">{dataCurta(item.inicio_previsto)} – {dataCurta(item.fim_previsto)}</dd></div><div><dt className="text-slate-400">Responsável</dt><dd className="mt-1 font-semibold text-slate-700">{item.responsavel}</dd></div><div><dt className="text-slate-400">Etapas</dt><dd className="mt-1 font-semibold text-slate-700">{item.etapas.length}</dd></div><div><dt className="text-slate-400">Orçamento</dt><dd className="mt-1 font-semibold text-slate-700">{dinheiro(item.orcamento_previsto)}</dd></div></dl>
+              <div className="mt-5"><div className="mb-2 flex justify-between text-xs font-semibold text-slate-500"><span>Andamento</span><span>{item.progresso}%</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${item.progresso}%` }} /></div></div>
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><span className={`text-xs font-semibold ${item.publicado ? "text-emerald-700" : "text-slate-400"}`}>{item.publicado ? "Visível aos condôminos" : "Oculto dos condôminos"}</span><button type="button" onClick={() => { setGerenciando(gerenciando === item.id ? null : item.id); setAtualizacao(item.ultima_atualizacao ?? ""); }} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:text-blue-700">{gerenciando === item.id ? "Fechar andamento" : "Gerenciar andamento"}</button></div>
+              {gerenciando === item.id && <div className="mt-5 border-t border-slate-100 pt-5"><label className="text-sm font-semibold text-slate-700">Atualização para os condôminos <span className="font-normal text-slate-400">(opcional)</span><textarea value={atualizacao} onChange={(e) => setAtualizacao(e.target.value)} className="input mt-2 min-h-20 resize-y" placeholder="Ex.: Vistoria concluída. Aguardando entrega do laudo." /></label><div className="mt-4 grid gap-3">{item.etapas.map((etapa) => <div key={etapa.id} className="flex flex-col gap-2 rounded-xl bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-slate-800">{etapa.ordem}. {etapa.titulo}</p><p className="mt-0.5 text-xs text-slate-500">{dataCurta(etapa.inicio_previsto)} – {dataCurta(etapa.fim_previsto)}</p></div><select aria-label={`Situação de ${etapa.titulo}`} value={etapa.status} disabled={processando === `etapa-${etapa.id}`} onChange={(e) => void atualizarStatus(item, etapa.id, e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"><option value="nao_iniciada">Não iniciada</option><option value="em_andamento">Em andamento</option><option value="concluida">Concluída</option><option value="atrasada">Atrasada</option><option value="bloqueada">Bloqueada</option></select></div>)}</div><button type="button" disabled={processando !== "" || item.status !== "planejado"} onClick={() => void atualizarPublicacao(item)} className={`mt-4 w-full rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50 ${item.publicado ? "border border-slate-200 text-slate-700 hover:bg-slate-50" : "bg-blue-600 text-white hover:bg-blue-700"}`}>{processando === `publicacao-${item.id}` ? "Salvando..." : item.publicado ? "Ocultar dos condôminos" : "Publicar para os condôminos"}</button></div>}
             </article>
           ))}</section>
         )}
