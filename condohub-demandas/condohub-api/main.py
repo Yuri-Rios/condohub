@@ -1,12 +1,14 @@
 import asyncio
 import logging
+import os
+import re
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from enum import Enum
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -29,13 +31,17 @@ from database import Base, engine, pegar_banco
 from migrations_runner import aplicar_migracoes_multitenant
 from models import (
     AdministradorPlataforma,
+    Ata,
     Condominio,
+    Cronograma,
+    EtapaCronograma,
     FUSO_BRASIL,
     MembroCondominio,
     MensagemOcorrencia,
     AtendimentoPrestador,
     HistoricoPedidoCompra,
     ItemEstoque,
+    IntegracaoOneDrive,
     MovimentoEstoque,
     NotificacaoOcorrencia,
     Ocorrencia,
@@ -47,6 +53,7 @@ from models import (
 )
 from schemas import (
     CondominioCriar,
+    CronogramaCriar,
     OcorrenciaCriar,
     OcorrenciaDetalhe,
     OcorrenciaResposta,
@@ -68,6 +75,20 @@ from schemas import (
     SolicitacaoAtualizarConvite,
     SolicitacaoConfirmarConvite,
     SolicitacaoRecusar,
+    AtaAtualizar,
+    PastaOneDriveConfigurar,
+)
+from onedrive import (
+    baixar_arquivo,
+    criar_estado,
+    criptografar_token,
+    ler_estado,
+    listar_arquivos,
+    obter_perfil_drive,
+    renovar_token,
+    resolver_pasta,
+    trocar_codigo,
+    url_autorizacao,
 )
 
 logger = logging.getLogger(__name__)
@@ -192,6 +213,236 @@ def health():
             headers={"Retry-After": "30"},
         )
     return {"status": "ok", "wakeup": VERSAO_WAKEUP}
+
+
+def _integracao_onedrive(banco: Session, condominio_id: int) -> IntegracaoOneDrive:
+    integracao = banco.query(IntegracaoOneDrive).filter(IntegracaoOneDrive.condominio_id == condominio_id).first()
+    if not integracao:
+        raise HTTPException(status_code=404, detail="OneDrive ainda não conectado.")
+    return integracao
+
+
+def _integracao_resposta(integracao: IntegracaoOneDrive | None):
+    if not integracao:
+        return {"conectada": False}
+    return {
+        "conectada": integracao.status == "ativa",
+        "status": integracao.status,
+        "email": integracao.microsoft_email,
+        "pasta": integracao.root_path,
+        "ultima_sincronizacao_em": integracao.ultima_sincronizacao_em,
+        "erro_ultima_sincronizacao": integracao.erro_ultima_sincronizacao,
+    }
+
+
+def _ata_resposta(ata: Ata, pode_gerenciar: bool):
+    return {
+        "id": ata.id,
+        "titulo": ata.titulo,
+        "tipo": ata.tipo,
+        "data_assembleia": ata.data_assembleia,
+        "descricao": ata.descricao,
+        "nome_arquivo": ata.nome_arquivo,
+        "mime_type": ata.mime_type,
+        "tamanho": ata.tamanho,
+        "modificado_em": ata.modificado_em,
+        "publicada": ata.publicada,
+        "pode_gerenciar": pode_gerenciar,
+    }
+
+
+def _metadados_iniciais_ata(nome_arquivo: str):
+    base = nome_arquivo.rsplit(".", 1)[0]
+    titulo = re.sub(r"[_-]+", " ", base).strip()
+    normalizado = titulo.lower()
+    tipo = "assembleia"
+    if "extraordin" in normalizado or re.search(r"\bage\b", normalizado):
+        tipo = "assembleia_extraordinaria"
+    elif "ordin" in normalizado or re.search(r"\bago\b", normalizado):
+        tipo = "assembleia_ordinaria"
+    elif "conselho" in normalizado:
+        tipo = "reuniao_conselho"
+    data = None
+    correspondencia = re.search(r"(?<!\d)(\d{2})[-_.](\d{2})[-_.](\d{4})(?!\d)", base)
+    if correspondencia:
+        try:
+            data = datetime(int(correspondencia[3]), int(correspondencia[2]), int(correspondencia[1]), 12, tzinfo=FUSO_BRASIL)
+        except ValueError:
+            pass
+    if not data:
+        correspondencia = re.search(r"(?<!\d)(\d{4})[-_.](\d{2})[-_.](\d{2})(?!\d)", base)
+        if correspondencia:
+            try:
+                data = datetime(int(correspondencia[1]), int(correspondencia[2]), int(correspondencia[3]), 12, tzinfo=FUSO_BRASIL)
+            except ValueError:
+                pass
+    return titulo, tipo, data
+
+
+@app.get("/integracoes/onedrive")
+def obter_integracao_onedrive(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    integracao = banco.query(IntegracaoOneDrive).filter(IntegracaoOneDrive.condominio_id == usuario.condominio_id).first()
+    return _integracao_resposta(integracao)
+
+
+@app.post("/integracoes/onedrive/conectar")
+def conectar_onedrive(usuario: ContextoCondominio = Depends(exigir_aprovador)):
+    return {"authorization_url": url_autorizacao(criar_estado(usuario.condominio_id, usuario.id))}
+
+
+@app.get("/integracoes/onedrive/callback")
+def callback_onedrive(code: str | None = None, state: str | None = None, error: str | None = None, banco: Session = Depends(pegar_banco)):
+    app_url = os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000").rstrip("/")
+    destino = f"{app_url}/administracao/onedrive"
+    if error or not code or not state:
+        return RedirectResponse(f"{destino}?onedrive=erro")
+    estado = ler_estado(state)
+    condominio_id = int(estado["condominio_id"])
+    membro = banco.query(MembroCondominio).filter(
+        MembroCondominio.condominio_id == condominio_id,
+        MembroCondominio.clerk_user_id == estado["usuario_id"],
+        MembroCondominio.status == "ativo",
+    ).first()
+    if not membro or set(membro.papeis.split(",")).isdisjoint({"sindico", "admin"}):
+        raise HTTPException(status_code=403, detail="Usuário sem permissão para conectar o OneDrive.")
+    tokens = trocar_codigo(code)
+    perfil, drive = obter_perfil_drive(tokens["access_token"])
+    raiz = resolver_pasta(tokens["access_token"], "/")
+    integracao = banco.query(IntegracaoOneDrive).filter(IntegracaoOneDrive.condominio_id == condominio_id).first()
+    if not integracao:
+        integracao = IntegracaoOneDrive(condominio_id=condominio_id)
+        banco.add(integracao)
+    integracao.microsoft_account_id = perfil["id"]
+    integracao.microsoft_email = perfil.get("mail") or perfil.get("userPrincipalName")
+    integracao.drive_id = drive["id"]
+    integracao.root_item_id = raiz["id"]
+    integracao.root_path = "/"
+    integracao.refresh_token_criptografado = criptografar_token(tokens["refresh_token"])
+    integracao.escopos = tokens.get("scope", "")
+    integracao.status = "ativa"
+    integracao.conectado_por = estado["usuario_id"]
+    integracao.conectado_em = datetime.now(FUSO_BRASIL)
+    integracao.erro_ultima_sincronizacao = None
+    banco.commit()
+    return RedirectResponse(f"{destino}?onedrive=conectado")
+
+
+@app.put("/integracoes/onedrive/pasta")
+def configurar_pasta_onedrive(dados: PastaOneDriveConfigurar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_aprovador)):
+    integracao = _integracao_onedrive(banco, usuario.condominio_id)
+    token = renovar_token(integracao)
+    pasta = resolver_pasta(token, dados.caminho)
+    integracao.root_item_id = pasta["id"]
+    integracao.root_path = dados.caminho
+    integracao.status = "ativa"
+    integracao.erro_ultima_sincronizacao = None
+    banco.commit()
+    return _integracao_resposta(integracao)
+
+
+@app.delete("/integracoes/onedrive", status_code=204)
+def desconectar_onedrive(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_aprovador)):
+    integracao = _integracao_onedrive(banco, usuario.condominio_id)
+    banco.delete(integracao)
+    banco.commit()
+
+
+@app.post("/atas/sincronizar")
+def sincronizar_atas(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    integracao = _integracao_onedrive(banco, usuario.condominio_id)
+    try:
+        token = renovar_token(integracao)
+        arquivos = listar_arquivos(token, integracao.drive_id, integracao.root_item_id)
+        importados = atualizados = 0
+        extensoes = {".pdf", ".doc", ".docx"}
+        for arquivo in arquivos:
+            nome = arquivo.get("name", "")
+            if not any(nome.lower().endswith(extensao) for extensao in extensoes):
+                continue
+            ata = banco.query(Ata).filter(Ata.condominio_id == usuario.condominio_id, Ata.drive_id == integracao.drive_id, Ata.drive_item_id == arquivo["id"]).first()
+            modificado = datetime.fromisoformat(arquivo["lastModifiedDateTime"].replace("Z", "+00:00")) if arquivo.get("lastModifiedDateTime") else None
+            if ata:
+                ata.nome_arquivo = nome
+                ata.mime_type = arquivo.get("file", {}).get("mimeType")
+                ata.tamanho = arquivo.get("size")
+                ata.etag = arquivo.get("eTag")
+                ata.modificado_em = modificado
+                atualizados += 1
+            else:
+                titulo, tipo, data_assembleia = _metadados_iniciais_ata(nome)
+                banco.add(Ata(
+                    condominio_id=usuario.condominio_id,
+                    titulo=titulo,
+                    tipo=tipo,
+                    data_assembleia=data_assembleia,
+                    drive_id=integracao.drive_id,
+                    drive_item_id=arquivo["id"],
+                    nome_arquivo=nome,
+                    mime_type=arquivo.get("file", {}).get("mimeType"),
+                    tamanho=arquivo.get("size"),
+                    etag=arquivo.get("eTag"),
+                    modificado_em=modificado,
+                    publicada=False,
+                ))
+                importados += 1
+        integracao.ultima_sincronizacao_em = datetime.now(FUSO_BRASIL)
+        integracao.erro_ultima_sincronizacao = None
+        banco.commit()
+        return {"importados": importados, "atualizados": atualizados, "encontrados": len(arquivos)}
+    except HTTPException as erro:
+        banco.rollback()
+        integracao = _integracao_onedrive(banco, usuario.condominio_id)
+        if erro.status_code == 401:
+            integracao.status = "requer_reconexao"
+        integracao.erro_ultima_sincronizacao = str(erro.detail)
+        banco.commit()
+        raise
+
+
+@app.get("/atas")
+def listar_atas(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
+    pode_gerenciar = not usuario.papeis.isdisjoint({"sindico", "subsindico", "funcionario", "admin"})
+    consulta = banco.query(Ata).filter(Ata.condominio_id == usuario.condominio_id)
+    if not pode_gerenciar:
+        consulta = consulta.filter(Ata.publicada.is_(True))
+    atas = consulta.order_by(Ata.data_assembleia.desc().nullslast(), Ata.modificado_em.desc()).all()
+    return [_ata_resposta(ata, pode_gerenciar) for ata in atas]
+
+
+@app.put("/atas/{ata_id}")
+def atualizar_ata(ata_id: int, dados: AtaAtualizar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    ata = banco.query(Ata).filter(Ata.id == ata_id, Ata.condominio_id == usuario.condominio_id).first()
+    if not ata:
+        raise HTTPException(status_code=404, detail="Ata não encontrada.")
+    estava_publicada = ata.publicada
+    ata.titulo = dados.titulo
+    ata.tipo = dados.tipo
+    ata.data_assembleia = dados.data_assembleia
+    ata.descricao = dados.descricao
+    ata.publicada = dados.publicada
+    if dados.publicada and not estava_publicada:
+        ata.publicado_em = datetime.now(FUSO_BRASIL)
+        ata.publicado_por = usuario.id
+    elif not dados.publicada:
+        ata.publicado_em = None
+        ata.publicado_por = None
+    banco.commit()
+    banco.refresh(ata)
+    return _ata_resposta(ata, True)
+
+
+@app.get("/atas/{ata_id}/arquivo")
+def obter_arquivo_ata(ata_id: int, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
+    ata = banco.query(Ata).filter(Ata.id == ata_id, Ata.condominio_id == usuario.condominio_id).first()
+    pode_gerenciar = not usuario.papeis.isdisjoint({"sindico", "subsindico", "funcionario", "admin"})
+    if not ata or (not ata.publicada and not pode_gerenciar):
+        raise HTTPException(status_code=404, detail="Ata não encontrada.")
+    integracao = _integracao_onedrive(banco, usuario.condominio_id)
+    token = renovar_token(integracao)
+    arquivo = baixar_arquivo(token, ata.drive_id, ata.drive_item_id)
+    banco.commit()
+    nome_seguro = ata.nome_arquivo.replace('"', "")
+    return Response(content=arquivo.content, media_type=ata.mime_type or arquivo.headers.get("content-type", "application/octet-stream"), headers={"Content-Disposition": f'inline; filename="{nome_seguro}"'})
 
 
 def _validar_data_reserva(inicio: datetime):
@@ -991,6 +1242,86 @@ def criar_prestador(dados: PrestadorCriar, banco: Session = Depends(pegar_banco)
     prestador = PrestadorServico(condominio_id=usuario.condominio_id, **dados.model_dump())
     banco.add(prestador); banco.commit(); banco.refresh(prestador)
     return _prestador_resposta(prestador, banco)
+
+
+def _cronograma_resposta(cronograma: Cronograma, banco: Session):
+    etapas = (
+        banco.query(EtapaCronograma)
+        .filter(EtapaCronograma.cronograma_id == cronograma.id)
+        .order_by(EtapaCronograma.ordem.asc())
+        .all()
+    )
+    return {
+        "id": cronograma.id,
+        "titulo": cronograma.titulo,
+        "categoria": cronograma.categoria,
+        "objetivo": cronograma.objetivo,
+        "responsavel": cronograma.responsavel,
+        "inicio_previsto": cronograma.inicio_previsto,
+        "fim_previsto": cronograma.fim_previsto,
+        "prioridade": cronograma.prioridade,
+        "orcamento_previsto": float(cronograma.orcamento_previsto) if cronograma.orcamento_previsto is not None else None,
+        "status": cronograma.status,
+        "criado_por_nome": cronograma.criado_por_nome,
+        "criado_em": cronograma.criado_em,
+        "etapas": [
+            {
+                "id": etapa.id,
+                "ordem": etapa.ordem,
+                "titulo": etapa.titulo,
+                "responsavel": etapa.responsavel,
+                "inicio_previsto": etapa.inicio_previsto,
+                "fim_previsto": etapa.fim_previsto,
+                "custo_previsto": float(etapa.custo_previsto) if etapa.custo_previsto is not None else None,
+                "status": etapa.status,
+            }
+            for etapa in etapas
+        ],
+    }
+
+
+@app.get("/cronogramas")
+def listar_cronogramas(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    itens = (
+        banco.query(Cronograma)
+        .filter(Cronograma.condominio_id == usuario.condominio_id)
+        .order_by(Cronograma.inicio_previsto.asc(), Cronograma.id.desc())
+        .all()
+    )
+    return [_cronograma_resposta(item, banco) for item in itens]
+
+
+@app.post("/cronogramas", status_code=201)
+def criar_cronograma(dados: CronogramaCriar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    cronograma = Cronograma(
+        condominio_id=usuario.condominio_id,
+        titulo=dados.titulo.strip(),
+        categoria=dados.categoria.strip(),
+        objetivo=dados.objetivo.strip(),
+        responsavel=dados.responsavel.strip(),
+        inicio_previsto=dados.inicio_previsto,
+        fim_previsto=dados.fim_previsto,
+        prioridade=dados.prioridade,
+        orcamento_previsto=dados.orcamento_previsto,
+        status=dados.status,
+        criado_por_id=usuario.id,
+        criado_por_nome=usuario.nome,
+    )
+    banco.add(cronograma)
+    banco.flush()
+    for ordem, etapa in enumerate(dados.etapas, start=1):
+        banco.add(EtapaCronograma(
+            cronograma_id=cronograma.id,
+            ordem=ordem,
+            titulo=etapa.titulo.strip(),
+            responsavel=etapa.responsavel.strip(),
+            inicio_previsto=etapa.inicio_previsto,
+            fim_previsto=etapa.fim_previsto,
+            custo_previsto=etapa.custo_previsto,
+        ))
+    banco.commit()
+    banco.refresh(cronograma)
+    return _cronograma_resposta(cronograma, banco)
 
 
 @app.post("/prestadores/{prestador_id}/atendimentos", status_code=201)

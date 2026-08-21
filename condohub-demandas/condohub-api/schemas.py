@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
@@ -197,6 +197,57 @@ class AtendimentoPrestadorCriar(BaseModel):
     observacao: str | None = Field(default=None, max_length=2000)
 
 
+class EtapaCronogramaCriar(BaseModel):
+    titulo: str = Field(min_length=2, max_length=160)
+    responsavel: str = Field(min_length=2, max_length=160)
+    inicio_previsto: date
+    fim_previsto: date
+    custo_previsto: float | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validar_periodo(self):
+        if self.fim_previsto < self.inicio_previsto:
+            raise ValueError("O término da etapa não pode ser anterior ao início.")
+        return self
+
+
+class CronogramaCriar(BaseModel):
+    titulo: str = Field(min_length=3, max_length=160)
+    categoria: str = Field(min_length=2, max_length=60)
+    objetivo: str = Field(min_length=3, max_length=4000)
+    responsavel: str = Field(min_length=2, max_length=160)
+    inicio_previsto: date
+    fim_previsto: date
+    prioridade: str = "normal"
+    orcamento_previsto: float | None = Field(default=None, ge=0)
+    status: str = "planejado"
+    etapas: list[EtapaCronogramaCriar] = Field(default_factory=list, max_length=100)
+
+    @field_validator("prioridade")
+    @classmethod
+    def validar_prioridade(cls, valor: str):
+        if valor not in {"normal", "alta", "urgente"}:
+            raise ValueError("Prioridade inválida.")
+        return valor
+
+    @field_validator("status")
+    @classmethod
+    def validar_status(cls, valor: str):
+        if valor not in {"rascunho", "planejado"}:
+            raise ValueError("Status inválido.")
+        return valor
+
+    @model_validator(mode="after")
+    def validar_periodos(self):
+        if self.fim_previsto < self.inicio_previsto:
+            raise ValueError("O término do cronograma não pode ser anterior ao início.")
+        if self.status == "planejado" and not self.etapas:
+            raise ValueError("Inclua pelo menos uma etapa no cronograma.")
+        if any(etapa.inicio_previsto < self.inicio_previsto or etapa.fim_previsto > self.fim_previsto for etapa in self.etapas):
+            raise ValueError("As etapas precisam estar dentro do período do cronograma.")
+        return self
+
+
 class ReservaCriar(BaseModel):
     ambiente: str
     inicio: datetime
@@ -308,3 +359,28 @@ class SolicitacaoConfirmarConvite(BaseModel):
 
 class SolicitacaoAtualizarConvite(BaseModel):
     invitation_id: str
+
+
+class PastaOneDriveConfigurar(BaseModel):
+    caminho: str = Field(min_length=1, max_length=1000)
+
+    @field_validator("caminho")
+    @classmethod
+    def validar_caminho(cls, valor: str):
+        partes = [parte.strip() for parte in valor.replace("\\", "/").split("/") if parte.strip()]
+        if any(parte in {".", ".."} for parte in partes):
+            raise ValueError("Caminho inválido.")
+        return "/" + "/".join(partes) if partes else "/"
+
+
+class AtaAtualizar(BaseModel):
+    titulo: str = Field(min_length=3, max_length=255)
+    tipo: str = Field(default="assembleia", max_length=40)
+    data_assembleia: datetime | None = None
+    descricao: str | None = Field(default=None, max_length=4000)
+    publicada: bool
+
+    @field_validator("titulo", "tipo")
+    @classmethod
+    def limpar_texto(cls, valor: str):
+        return valor.strip()

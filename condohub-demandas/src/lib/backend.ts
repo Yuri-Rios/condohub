@@ -66,12 +66,14 @@ async function encaminhar(
         continue;
       }
 
+      const headers = new Headers({
+        "content-type": resposta.headers.get("content-type") ?? "application/json",
+      });
+      const disposicao = resposta.headers.get("content-disposition");
+      if (disposicao) headers.set("content-disposition", disposicao);
       return new Response(resposta.body, {
         status: resposta.status,
-        headers: {
-          "content-type":
-            resposta.headers.get("content-type") ?? "application/json",
-        },
+        headers,
       });
     } catch {
       if (tentativa < ATRASOS_TENTATIVAS_MS.length - 1) continue;

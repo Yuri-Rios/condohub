@@ -155,6 +155,30 @@ Depois instale as dependências Python atualizadas de `condohub-api/requirements
 As migrações multi-tenant `006` e `007` são idempotentes e executadas na
 inicialização da API, inclusive no Render.
 
+## Integração com OneDrive para atas
+
+O módulo `/atas` cataloga PDFs e documentos Word mantidos no OneDrive pessoal
+do condomínio. Os arquivos continuam pertencendo ao cliente; o CondoHub guarda
+metadados e controla quais atas foram publicadas para os moradores.
+
+Para configurar:
+
+1. Registre um aplicativo na Microsoft identity platform aceitando contas
+   Microsoft pessoais.
+2. Cadastre como redirect URI do tipo Web a URL pública da API seguida de
+   `/integracoes/onedrive/callback`.
+3. Configure no serviço FastAPI as variáveis `MICROSOFT_CLIENT_ID`,
+   `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_REDIRECT_URI`,
+   `MICROSOFT_OAUTH_STATE_SECRET` e `MICROSOFT_TOKEN_ENCRYPTION_KEY`.
+4. Gere a chave de criptografia uma única vez com o comando documentado em
+   `.env.example`. Trocar essa chave invalida as conexões já armazenadas.
+5. No aplicativo, um síndico ou administrador acessa `Administração > OneDrive`,
+   conecta a conta e informa a pasta existente das atas.
+
+A integração solicita os escopos delegados `Files.ReadWrite`, `User.Read` e
+`offline_access`. A sincronização do MVP é manual, recursiva e importa arquivos
+`.pdf`, `.doc` e `.docx` como pendentes de revisão.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

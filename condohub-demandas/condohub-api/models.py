@@ -1,7 +1,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 
 from database import Base
 
@@ -227,6 +227,39 @@ class AtendimentoPrestador(Base):
     criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
 
 
+class Cronograma(Base):
+    __tablename__ = "cronogramas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(Integer, ForeignKey("condominios.id", ondelete="CASCADE"), nullable=False, index=True)
+    titulo = Column(String(160), nullable=False)
+    categoria = Column(String(60), nullable=False)
+    objetivo = Column(Text, nullable=False)
+    responsavel = Column(String(160), nullable=False)
+    inicio_previsto = Column(Date, nullable=False)
+    fim_previsto = Column(Date, nullable=False)
+    prioridade = Column(String(20), nullable=False, default="normal")
+    orcamento_previsto = Column(Numeric(12, 2), nullable=True)
+    status = Column(String(20), nullable=False, default="rascunho", index=True)
+    criado_por_id = Column(String(255), nullable=False)
+    criado_por_nome = Column(String(160), nullable=False)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
+class EtapaCronograma(Base):
+    __tablename__ = "etapas_cronograma"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cronograma_id = Column(Integer, ForeignKey("cronogramas.id", ondelete="CASCADE"), nullable=False, index=True)
+    ordem = Column(Integer, nullable=False)
+    titulo = Column(String(160), nullable=False)
+    responsavel = Column(String(160), nullable=False)
+    inicio_previsto = Column(Date, nullable=False)
+    fim_previsto = Column(Date, nullable=False)
+    custo_previsto = Column(Numeric(12, 2), nullable=True)
+    status = Column(String(20), nullable=False, default="planejada")
+
+
 class ReservaAmbiente(Base):
     __tablename__ = "reservas_ambientes"
     __table_args__ = (
@@ -275,3 +308,50 @@ class SolicitacaoAcesso(Base):
     decidido_por = Column(String(255), nullable=True)
     motivo_recusa = Column(Text, nullable=True)
     clerk_invitation_id = Column(String(255), nullable=True)
+
+
+class IntegracaoOneDrive(Base):
+    __tablename__ = "integracoes_onedrive"
+    __table_args__ = (
+        UniqueConstraint("condominio_id", name="uq_integracao_onedrive_condominio"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(Integer, ForeignKey("condominios.id", ondelete="CASCADE"), nullable=False, index=True)
+    microsoft_account_id = Column(String(255), nullable=False)
+    microsoft_email = Column(String(320), nullable=True)
+    drive_id = Column(String(255), nullable=False)
+    root_item_id = Column(String(255), nullable=False)
+    root_path = Column(Text, nullable=False)
+    refresh_token_criptografado = Column(Text, nullable=False)
+    escopos = Column(Text, nullable=False)
+    status = Column(String(30), nullable=False, default="ativa")
+    conectado_por = Column(String(255), nullable=False)
+    conectado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+    ultima_sincronizacao_em = Column(DateTime(timezone=True), nullable=True)
+    erro_ultima_sincronizacao = Column(Text, nullable=True)
+
+
+class Ata(Base):
+    __tablename__ = "atas"
+    __table_args__ = (
+        UniqueConstraint("condominio_id", "drive_id", "drive_item_id", name="uq_ata_item_onedrive"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(Integer, ForeignKey("condominios.id", ondelete="CASCADE"), nullable=False, index=True)
+    titulo = Column(String(255), nullable=False)
+    tipo = Column(String(40), nullable=False, default="assembleia")
+    data_assembleia = Column(DateTime(timezone=True), nullable=True)
+    descricao = Column(Text, nullable=True)
+    drive_id = Column(String(255), nullable=False)
+    drive_item_id = Column(String(255), nullable=False)
+    nome_arquivo = Column(String(255), nullable=False)
+    mime_type = Column(String(160), nullable=True)
+    tamanho = Column(Integer, nullable=True)
+    etag = Column(Text, nullable=True)
+    modificado_em = Column(DateTime(timezone=True), nullable=True)
+    publicada = Column(Boolean, nullable=False, default=False, index=True)
+    publicado_em = Column(DateTime(timezone=True), nullable=True)
+    publicado_por = Column(String(255), nullable=True)
+    importado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)

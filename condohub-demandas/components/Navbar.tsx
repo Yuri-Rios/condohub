@@ -94,6 +94,7 @@ export default function Navbar() {
     ...(podeAgendar
       ? [{ href: "/agendamentos", label: "Agendamentos" }]
       : []),
+    { href: "/atas", label: "Atas" },
   ];
   const itensGestao: ItemMenu[] = podeAdministrar
     ? [
@@ -108,6 +109,8 @@ export default function Navbar() {
         { href: "/pedidos-compra", label: "Compras" },
         { href: "/estoque", label: "Estoque" },
         { href: "/prestadores", label: "Prestadores" },
+        { href: "/cronogramas", label: "Cronogramas" },
+        { href: "/administracao/onedrive", label: "OneDrive" },
       ]
     : [];
   const itensPlataforma: ItemMenu[] = acesso?.admin_plataforma
