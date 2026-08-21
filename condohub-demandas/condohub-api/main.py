@@ -37,6 +37,7 @@ from models import (
     EtapaCronograma,
     FUSO_BRASIL,
     MembroCondominio,
+    ModuloCondominio,
     MensagemOcorrencia,
     AtendimentoPrestador,
     HistoricoPedidoCompra,
@@ -53,6 +54,8 @@ from models import (
 )
 from schemas import (
     CondominioCriar,
+    ModuloHabilitacao,
+    ModuloVisibilidade,
     CronogramaCriar,
     CronogramaPublicacao,
     EtapaCronogramaStatus,
@@ -106,6 +109,16 @@ estado_inicializacao = EstadoInicializacao.INICIANDO
 erro_inicializacao: str | None = None
 ATRASOS_INICIALIZACAO = (0, 2, 5, 10, 20, 30)
 VERSAO_WAKEUP = "browser-direct-v5"
+CATALOGO_MODULOS = (
+    ("chamados", "Chamados", True),
+    ("agendamentos", "Agendamentos", True),
+    ("atas", "Atas", True),
+    ("acompanhamento", "Acompanhamento", True),
+    ("compras", "Compras", False),
+    ("estoque", "Estoque", False),
+    ("prestadores", "Prestadores", False),
+    ("cronogramas", "Cronogramas", False),
+)
 
 
 def inicializar_banco():
@@ -1412,10 +1425,18 @@ def meus_dados(
         .first()
         is not None
     )
+    modulos = banco.query(ModuloCondominio).filter(ModuloCondominio.condominio_id == usuario.condominio_id).all()
     return {
         "id": usuario.id,
         "papeis": sorted(usuario.papeis),
         "admin_plataforma": admin_plataforma,
+        "modulos": {
+            modulo.chave: {
+                "habilitado": modulo.habilitado,
+                "visivel_moradores": modulo.visivel_moradores,
+            }
+            for modulo in modulos
+        },
         "condominio": {
             "id": usuario.condominio_id,
             "slug": usuario.condominio_slug,
@@ -1639,12 +1660,20 @@ def listar_condominios_da_plataforma(
     banco: Session = Depends(pegar_banco),
     _usuario: UsuarioAutenticado = Depends(exigir_admin_plataforma),
 ):
+    configuracoes = banco.query(ModuloCondominio).all()
+    por_condominio = {}
+    for modulo in configuracoes:
+        por_condominio.setdefault(modulo.condominio_id, {})[modulo.chave] = {
+            "habilitado": modulo.habilitado,
+            "visivel_moradores": modulo.visivel_moradores,
+        }
     return [
         {
             "id": item.id,
             "nome": item.nome,
             "slug": item.slug,
             "ativo": item.ativo == 1,
+            "modulos": por_condominio.get(item.id, {}),
         }
         for item in banco.query(Condominio).order_by(Condominio.nome.asc()).all()
     ]
@@ -1666,6 +1695,8 @@ def criar_condominio(
     condominio = Condominio(nome=dados.nome, slug=dados.slug, ativo=1)
     banco.add(condominio)
     banco.flush()
+    for chave, _nome, _moradores in CATALOGO_MODULOS:
+        banco.add(ModuloCondominio(condominio_id=condominio.id, chave=chave, habilitado=False, visivel_moradores=False))
     banco.add(
         MembroCondominio(
             condominio_id=condominio.id,
@@ -1684,6 +1715,59 @@ def criar_condominio(
         "slug": condominio.slug,
         "ativo": True,
     }
+
+
+@app.patch("/admin/condominios/{condominio_id}/modulos/{chave}")
+def configurar_modulo_pela_plataforma(
+    condominio_id: int,
+    chave: str,
+    dados: ModuloHabilitacao,
+    banco: Session = Depends(pegar_banco),
+    _usuario: UsuarioAutenticado = Depends(exigir_admin_plataforma),
+):
+    if chave not in {item[0] for item in CATALOGO_MODULOS}:
+        raise HTTPException(404, "Módulo não encontrado.")
+    modulo = banco.query(ModuloCondominio).filter(ModuloCondominio.condominio_id == condominio_id, ModuloCondominio.chave == chave).first()
+    if not modulo:
+        modulo = ModuloCondominio(condominio_id=condominio_id, chave=chave)
+        banco.add(modulo)
+    modulo.habilitado = dados.habilitado
+    if not dados.habilitado:
+        modulo.visivel_moradores = False
+    banco.commit()
+    return {"chave": chave, "habilitado": modulo.habilitado, "visivel_moradores": modulo.visivel_moradores}
+
+
+@app.get("/configuracoes/modulos")
+def listar_configuracoes_modulos(
+    banco: Session = Depends(pegar_banco),
+    usuario: ContextoCondominio = Depends(exigir_aprovador),
+):
+    modulos = {item.chave: item for item in banco.query(ModuloCondominio).filter(ModuloCondominio.condominio_id == usuario.condominio_id).all()}
+    return [
+        {"chave": chave, "nome": nome, "permite_moradores": permite_moradores,
+         "habilitado": bool(modulos.get(chave) and modulos[chave].habilitado),
+         "visivel_moradores": bool(modulos.get(chave) and modulos[chave].visivel_moradores)}
+        for chave, nome, permite_moradores in CATALOGO_MODULOS
+    ]
+
+
+@app.patch("/configuracoes/modulos/{chave}/visibilidade")
+def configurar_visibilidade_moradores(
+    chave: str,
+    dados: ModuloVisibilidade,
+    banco: Session = Depends(pegar_banco),
+    usuario: ContextoCondominio = Depends(exigir_aprovador),
+):
+    catalogo = {item[0]: item for item in CATALOGO_MODULOS}
+    if chave not in catalogo or not catalogo[chave][2]:
+        raise HTTPException(422, "Este módulo não possui visualização para moradores.")
+    modulo = banco.query(ModuloCondominio).filter(ModuloCondominio.condominio_id == usuario.condominio_id, ModuloCondominio.chave == chave).first()
+    if not modulo or not modulo.habilitado:
+        raise HTTPException(422, "O módulo precisa ser liberado pelo CondoHub primeiro.")
+    modulo.visivel_moradores = dados.visivel_moradores
+    banco.commit()
+    return {"chave": chave, "habilitado": modulo.habilitado, "visivel_moradores": modulo.visivel_moradores}
 
 
 @app.post("/solicitacoes-acesso", response_model=SolicitacaoAcessoResposta)

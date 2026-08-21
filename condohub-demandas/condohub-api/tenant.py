@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -18,10 +18,19 @@ from models import (
     AdministradorPlataforma,
     Condominio,
     MembroCondominio,
+    ModuloCondominio,
     SolicitacaoAcesso,
 )
 
 CONDOMINIO_PADRAO_SLUG = "camila-barbosa"
+
+MODULOS_POR_PREFIXO = {
+    "/ocorrencias": "chamados", "/mensagens": "chamados", "/notificacoes": "chamados",
+    "/reservas": "agendamentos", "/atas": "atas", "/integracoes/onedrive": "atas", "/acompanhamento": "acompanhamento",
+    "/pedidos-compra": "compras", "/estoque": "estoque", "/prestadores": "prestadores",
+    "/cronogramas": "cronogramas",
+}
+MODULOS_VISIVEIS_A_MORADORES = {"chamados", "agendamentos", "atas", "acompanhamento"}
 
 
 @dataclass(frozen=True)
@@ -69,6 +78,7 @@ def condominio_publico(
 
 
 def contexto_condominio(
+    request: Request,
     usuario: Annotated[UsuarioAutenticado, Depends(usuario_atual)],
     banco: Annotated[Session, Depends(pegar_banco)],
     condominio_slug: Annotated[
@@ -163,6 +173,16 @@ def contexto_condominio(
             status_code=403,
             detail="Usuário sem papel ativo neste condomínio.",
         )
+    modulo = next((chave for prefixo, chave in MODULOS_POR_PREFIXO.items() if request.url.path.startswith(prefixo)), None)
+    if modulo:
+        configuracao = banco.query(ModuloCondominio).filter(
+            ModuloCondominio.condominio_id == condominio.id,
+            ModuloCondominio.chave == modulo,
+        ).first()
+        if not configuracao or not configuracao.habilitado:
+            raise HTTPException(status_code=403, detail="Este módulo não está disponível para o condomínio.")
+        if papeis.isdisjoint(PAPEIS_GESTORES) and modulo in MODULOS_VISIVEIS_A_MORADORES and not configuracao.visivel_moradores:
+            raise HTTPException(status_code=403, detail="Este módulo não está visível para os moradores.")
     return ContextoCondominio(
         id=usuario.id,
         nome=membro.nome,

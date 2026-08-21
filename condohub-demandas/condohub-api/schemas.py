@@ -230,6 +230,14 @@ class CronogramaCriar(BaseModel):
             raise ValueError("Prioridade inválida.")
         return valor
 
+
+class ModuloHabilitacao(BaseModel):
+    habilitado: bool
+
+
+class ModuloVisibilidade(BaseModel):
+    visivel_moradores: bool
+
     @field_validator("status")
     @classmethod
     def validar_status(cls, valor: str):

@@ -6,6 +6,7 @@ export type AcessoAtual = {
   id: string;
   papeis: string[];
   admin_plataforma: boolean;
+  modulos: Record<string, { habilitado: boolean; visivel_moradores: boolean }>;
   condominio: {
     id: number;
     slug: string;

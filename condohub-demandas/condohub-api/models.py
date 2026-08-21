@@ -227,6 +227,19 @@ class AtendimentoPrestador(Base):
     criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
 
 
+class ModuloCondominio(Base):
+    __tablename__ = "modulos_condominio"
+    __table_args__ = (
+        UniqueConstraint("condominio_id", "chave", name="uq_modulo_condominio_chave"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(Integer, ForeignKey("condominios.id", ondelete="CASCADE"), nullable=False, index=True)
+    chave = Column(String(40), nullable=False)
+    habilitado = Column(Boolean, nullable=False, default=False)
+    visivel_moradores = Column(Boolean, nullable=False, default=False)
+
+
 class Cronograma(Base):
     __tablename__ = "cronogramas"
 

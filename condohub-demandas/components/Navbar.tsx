@@ -40,6 +40,12 @@ export default function Navbar() {
   const podeVerMoradores = papeis.some((papel) =>
     ["sindico", "admin"].includes(papel),
   );
+  const ehGestor = papeis.some((papel) => ["sindico", "subsindico", "funcionario", "admin"].includes(papel));
+  const podeConfigurar = papeis.some((papel) => ["sindico", "admin"].includes(papel));
+  const podeAcessarModulo = (chave: string) => {
+    const modulo = acesso?.modulos?.[chave];
+    return Boolean(modulo?.habilitado && (ehGestor || modulo.visivel_moradores));
+  };
   const [pendentes, setPendentes] = useState(0);
   const [atualizacoesChamados, setAtualizacoesChamados] = useState(0);
   const [condominios, setCondominios] = useState<CondominioDisponivel[]>([]);
@@ -85,17 +91,16 @@ export default function Navbar() {
   }, [acesso?.condominio.id]);
 
   const itensAtendimento: ItemMenu[] = [
-    { href: "/nova-ocorrencia", label: "Novo chamado" },
-    {
+    ...(podeAcessarModulo("chamados") ? [{ href: "/nova-ocorrencia", label: "Novo chamado" }, {
       href: "/ocorrencias",
       label: "Chamados",
       badge: atualizacoesChamados,
-    },
-    ...(podeAgendar
+    }] : []),
+    ...(podeAgendar && podeAcessarModulo("agendamentos")
       ? [{ href: "/agendamentos", label: "Agendamentos" }]
       : []),
-    { href: "/atas", label: "Atas" },
-    { href: "/acompanhamento", label: "Acompanhamento" },
+    ...(podeAcessarModulo("atas") ? [{ href: "/atas", label: "Atas" }] : []),
+    ...(podeAcessarModulo("acompanhamento") ? [{ href: "/acompanhamento", label: "Acompanhamento" }] : []),
   ];
   const itensGestao: ItemMenu[] = podeAdministrar
     ? [
@@ -107,11 +112,12 @@ export default function Navbar() {
         ...(podeVerMoradores
           ? [{ href: "/administracao/moradores", label: "Moradores" }]
           : []),
-        { href: "/pedidos-compra", label: "Compras" },
-        { href: "/estoque", label: "Estoque" },
-        { href: "/prestadores", label: "Prestadores" },
-        { href: "/cronogramas", label: "Cronogramas" },
-        { href: "/administracao/onedrive", label: "OneDrive" },
+        ...(podeAcessarModulo("compras") ? [{ href: "/pedidos-compra", label: "Compras" }] : []),
+        ...(podeAcessarModulo("estoque") ? [{ href: "/estoque", label: "Estoque" }] : []),
+        ...(podeAcessarModulo("prestadores") ? [{ href: "/prestadores", label: "Prestadores" }] : []),
+        ...(podeAcessarModulo("cronogramas") ? [{ href: "/cronogramas", label: "Cronogramas" }] : []),
+        ...(podeAcessarModulo("atas") ? [{ href: "/administracao/onedrive", label: "OneDrive" }] : []),
+        ...(podeConfigurar ? [{ href: "/configuracoes", label: "Configurações" }] : []),
       ]
     : [];
   const itensPlataforma: ItemMenu[] = acesso?.admin_plataforma
@@ -164,7 +170,7 @@ export default function Navbar() {
     <header className="sticky top-3 z-20 mb-10 rounded-2xl border border-white/80 bg-white/90 p-2 shadow-[0_8px_32px_rgba(15,23,42,0.08)] backdrop-blur">
       <nav className="flex items-center gap-2">
         <Link
-          href="/ocorrencias"
+          href={podeAcessarModulo("chamados") ? "/ocorrencias" : "/conta"}
           aria-label="CondoHub — chamados"
           className="flex shrink-0 items-center gap-2 px-2 py-1"
         >
@@ -176,7 +182,7 @@ export default function Navbar() {
           </span>
         </Link>
 
-        <div className="hidden items-center gap-1 md:flex">
+        {podeAcessarModulo("chamados") && <div className="hidden items-center gap-1 md:flex">
           <Link
             href="/nova-ocorrencia"
             className={`whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold ${classeLink("/nova-ocorrencia")}`}
@@ -194,7 +200,7 @@ export default function Navbar() {
               </span>
             )}
           </Link>
-        </div>
+        </div>}
 
         <div className="ml-auto flex min-w-0 items-center gap-2">
           {condominios.length > 1 ? (

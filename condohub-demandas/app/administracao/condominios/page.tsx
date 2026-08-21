@@ -11,12 +11,22 @@ type Condominio = {
   nome: string;
   slug: string;
   ativo: boolean;
+  modulos: Record<string, { habilitado: boolean; visivel_moradores: boolean }>;
 };
+
+const catalogo = [
+  ["chamados", "Chamados"], ["agendamentos", "Agendamentos"], ["atas", "Atas"],
+  ["acompanhamento", "Acompanhamento"], ["compras", "Compras"], ["estoque", "Estoque"],
+  ["prestadores", "Prestadores"], ["cronogramas", "Cronogramas"],
+] as const;
 
 export default function CondominiosPage() {
   const [condominios, setCondominios] = useState<Condominio[]>([]);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const [configurando, setConfigurando] = useState<number | null>(null);
+  const [processando, setProcessando] = useState("");
+  const [aviso, setAviso] = useState("");
 
   const carregar = useCallback(async () => {
     const resposta = await fetch("/api/admin/condominios");
@@ -74,6 +84,18 @@ export default function CondominiosPage() {
     await carregar();
   }
 
+  async function alternarModulo(condominio: Condominio, chave: string) {
+    const habilitado = condominio.modulos[chave]?.habilitado ?? false;
+    setProcessando(`${condominio.id}-${chave}`); setErro(""); setAviso("");
+    const resposta = await fetch(`/api/admin/condominios/${condominio.id}/modulos/${encodeURIComponent(chave)}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ habilitado: !habilitado }),
+    });
+    setProcessando("");
+    if (!resposta.ok) { const dados = await resposta.json().catch(() => null); setErro(dados?.detail ?? "Não foi possível alterar o produto."); return; }
+    setAviso("Produtos do condomínio atualizados."); await carregar();
+  }
+
   return (
     <main className="min-h-screen px-4 py-3 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
@@ -88,6 +110,7 @@ export default function CondominiosPage() {
             {erro}
           </p>
         )}
+        {aviso && <p className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">{aviso}</p>}
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[360px_1fr]">
           <form
@@ -133,9 +156,9 @@ export default function CondominiosPage() {
             {condominios.map((condominio) => (
               <article
                 key={condominio.id}
-                className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center"
+                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
               >
-                <div>
+                <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div>
                   <h2 className="font-bold text-slate-950">{condominio.nome}</h2>
                   <p className="mt-1 text-sm text-slate-500">
                     /{condominio.slug}
@@ -151,7 +174,10 @@ export default function CondominiosPage() {
                   >
                     Link de acesso
                   </Link>
+                  <button type="button" onClick={() => setConfigurando(configurando === condominio.id ? null : condominio.id)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50">{configurando === condominio.id ? "Fechar" : "Produtos"}</button>
                 </div>
+                </div>
+                {configurando === condominio.id && <div className="mt-5 border-t border-slate-100 pt-5"><p className="mb-3 text-sm font-semibold text-slate-700">Módulos contratados</p><div className="grid gap-2 sm:grid-cols-2">{catalogo.map(([chave, nome]) => { const habilitado = condominio.modulos[chave]?.habilitado ?? false; return <button key={chave} type="button" role="switch" aria-checked={habilitado} disabled={processando === `${condominio.id}-${chave}`} onClick={() => void alternarModulo(condominio, chave)} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-left disabled:opacity-50"><span className="text-sm font-semibold text-slate-700">{nome}</span><span className={`relative h-6 w-11 rounded-full ${habilitado ? "bg-blue-600" : "bg-slate-300"}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${habilitado ? "left-6" : "left-1"}`} /></span></button>; })}</div><p className="mt-3 text-xs text-slate-500">Ao desativar um módulo, ele também deixa de ficar visível para os moradores.</p></div>}
               </article>
             ))}
           </section>
