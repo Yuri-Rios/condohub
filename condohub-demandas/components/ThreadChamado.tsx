@@ -27,6 +27,8 @@ type Thread = {
   mensagens: Mensagem[];
 };
 
+type Anexo = { id: number; nome: string; mime_type: string; tamanho: number; autor_nome: string; criado_em: string; url: string; pode_excluir: boolean };
+
 type StatusChamado = "novo" | "em_andamento" | "em_espera" | "fechado";
 
 const statusChamado: Record<
@@ -97,6 +99,9 @@ export default function ThreadChamado({
   const [titulo, setTitulo] = useState("");
   const [local, setLocal] = useState("");
   const [descricao, setDescricao] = useState("");
+  const [anexos, setAnexos] = useState<Anexo[]>([]);
+  const [fotos, setFotos] = useState<File[]>([]);
+  const [enviandoFotos, setEnviandoFotos] = useState(false);
   const campoMensagem = useRef<HTMLTextAreaElement>(null);
 
   function adicionarEmoji(emoji: string) {
@@ -112,24 +117,26 @@ export default function ThreadChamado({
   }
 
   async function carregar() {
-    const resposta = await fetch(`/api/ocorrencias/${ocorrenciaId}/thread`);
+    const [resposta, respostaAnexos] = await Promise.all([fetch(`/api/ocorrencias/${ocorrenciaId}/thread`), fetch(`/api/ocorrencias/${ocorrenciaId}/anexos`)]);
     const dados = await resposta.json();
     if (!resposta.ok) {
       setErro(dados.detail ?? "Não foi possível abrir a conversa.");
       return;
     }
     setThread(dados);
+    if (respostaAnexos.ok) setAnexos(await respostaAnexos.json());
   }
 
   useEffect(() => {
-    void fetch(`/api/ocorrencias/${ocorrenciaId}/thread`)
-      .then(async (resposta) => ({ resposta, dados: await resposta.json() }))
-      .then(({ resposta, dados }) => {
+    void Promise.all([fetch(`/api/ocorrencias/${ocorrenciaId}/thread`), fetch(`/api/ocorrencias/${ocorrenciaId}/anexos`)])
+      .then(async ([resposta, respostaAnexos]) => ({ resposta, dados: await resposta.json(), anexos: respostaAnexos.ok ? await respostaAnexos.json() : [] }))
+      .then(({ resposta, dados, anexos }) => {
         if (!resposta.ok) {
           setErro(dados.detail ?? "Não foi possível abrir a conversa.");
           return;
         }
         setThread(dados);
+        setAnexos(anexos);
       });
   }, [ocorrenciaId]);
 
@@ -234,6 +241,23 @@ export default function ThreadChamado({
       descricao: dados.descricao,
     });
     setEditando(false);
+  }
+
+  async function enviarFotos() {
+    if (fotos.length === 0) return;
+    setEnviandoFotos(true); setErro("");
+    const dados = new FormData(); fotos.forEach((foto) => dados.append("arquivos", foto));
+    const resposta = await fetch(`/api/ocorrencias/${ocorrenciaId}/anexos`, { method: "POST", body: dados });
+    setEnviandoFotos(false);
+    if (!resposta.ok) { const retorno = await resposta.json().catch(() => null); setErro(retorno?.detail ?? "Não foi possível enviar as fotos."); return; }
+    setFotos([]); await carregar();
+  }
+
+  async function excluirAnexo(anexo: Anexo) {
+    if (!window.confirm(`Excluir a foto “${anexo.nome}”?`)) return;
+    const resposta = await fetch(`/api/ocorrencias/${ocorrenciaId}/anexos/${anexo.id}`, { method: "DELETE" });
+    if (!resposta.ok) { setErro("Não foi possível excluir a foto."); return; }
+    await carregar();
   }
 
   if (erro && !thread) {
@@ -377,6 +401,10 @@ export default function ThreadChamado({
         </div>
       </div>
       )}
+
+      <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><h3 className="text-sm font-bold text-slate-900">Fotos do chamado</h3><p className="mt-1 text-xs text-slate-500">Armazenadas no espaço conectado pelo condomínio.</p></div><div className="flex flex-wrap gap-2"><input aria-label="Selecionar fotos" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e) => setFotos(Array.from(e.target.files ?? []).slice(0, 5))} className="max-w-56 text-xs text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-semibold file:text-blue-700" /><button type="button" disabled={fotos.length === 0 || enviandoFotos} onClick={() => void enviarFotos()} className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{enviandoFotos ? "Enviando..." : `Anexar${fotos.length ? ` (${fotos.length})` : ""}`}</button></div></div>
+        {anexos.length > 0 ? <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{anexos.map((anexo) => <div key={anexo.id} className="group relative overflow-hidden rounded-xl border border-slate-200"><a href={anexo.url} target="_blank" rel="noreferrer" aria-label={`Abrir ${anexo.nome}`}><span className="block aspect-square bg-cover bg-center" style={{ backgroundImage: `url("${anexo.url}")` }} /><span className="block truncate px-2 py-2 text-xs font-semibold text-slate-600">{anexo.nome}</span></a>{anexo.pode_excluir && <button type="button" onClick={() => void excluirAnexo(anexo)} className="absolute right-2 top-2 rounded-lg bg-white/90 px-2 py-1 text-xs font-bold text-rose-600 shadow">Excluir</button>}</div>)}</div> : <p className="mt-4 text-center text-sm text-slate-400">Nenhuma foto anexada.</p>}
+      </section>
 
       <div className="mt-5 space-y-4">
         {thread.mensagens.length === 0 ? (

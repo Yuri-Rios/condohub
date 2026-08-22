@@ -233,11 +233,28 @@ class ModuloCondominio(Base):
         UniqueConstraint("condominio_id", "chave", name="uq_modulo_condominio_chave"),
     )
 
+
     id = Column(Integer, primary_key=True, index=True)
     condominio_id = Column(Integer, ForeignKey("condominios.id", ondelete="CASCADE"), nullable=False, index=True)
     chave = Column(String(40), nullable=False)
     habilitado = Column(Boolean, nullable=False, default=False)
     visivel_moradores = Column(Boolean, nullable=False, default=False)
+
+
+class AnexoOcorrencia(Base):
+    __tablename__ = "anexos_ocorrencia"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ocorrencia_id = Column(Integer, ForeignKey("ocorrencias.id", ondelete="CASCADE"), nullable=False, index=True)
+    provedor = Column(String(30), nullable=False)
+    arquivo_externo_id = Column(String(255), nullable=False)
+    armazenamento_id = Column(String(255), nullable=False)
+    nome = Column(String(255), nullable=False)
+    mime_type = Column(String(100), nullable=False)
+    tamanho = Column(Integer, nullable=False)
+    autor_id = Column(String(255), nullable=False, index=True)
+    autor_nome = Column(String(160), nullable=False)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
 
 
 class Cronograma(Base):

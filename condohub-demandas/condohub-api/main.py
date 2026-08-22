@@ -3,11 +3,12 @@ import logging
 import os
 import re
 import time
+from urllib.parse import quote
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from enum import Enum
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -31,6 +32,7 @@ from database import Base, engine, pegar_banco
 from migrations_runner import aplicar_migracoes_multitenant
 from models import (
     AdministradorPlataforma,
+    AnexoOcorrencia,
     Ata,
     Condominio,
     Cronograma,
@@ -98,6 +100,7 @@ from onedrive import (
     trocar_codigo,
     url_autorizacao,
 )
+from storage import obter_storage
 
 logger = logging.getLogger(__name__)
 
@@ -1303,6 +1306,80 @@ def _cronograma_resposta(cronograma: Cronograma, banco: Session):
     }
 
 
+TIPOS_IMAGEM_ANEXO = {"image/jpeg", "image/png", "image/webp"}
+LIMITE_ANEXO_BYTES = 8 * 1024 * 1024
+
+
+def _buscar_ocorrencia(banco: Session, ocorrencia_id: int, condominio_id: int):
+    ocorrencia = banco.query(Ocorrencia).filter(Ocorrencia.id == ocorrencia_id, Ocorrencia.condominio_id == condominio_id).first()
+    if not ocorrencia:
+        raise HTTPException(404, "Chamado não encontrado.")
+    return ocorrencia
+
+
+def _anexo_resposta(anexo: AnexoOcorrencia, usuario: ContextoCondominio):
+    pode_gerenciar = not usuario.papeis.isdisjoint(PAPEIS_COM_IDENTIDADE_DOS_CHAMADOS)
+    return {"id": anexo.id, "nome": anexo.nome, "mime_type": anexo.mime_type, "tamanho": anexo.tamanho,
+            "autor_nome": anexo.autor_nome, "criado_em": anexo.criado_em,
+            "url": f"/api/ocorrencias/{anexo.ocorrencia_id}/anexos/{anexo.id}/arquivo",
+            "pode_excluir": anexo.autor_id == usuario.id or pode_gerenciar}
+
+
+@app.get("/ocorrencias/{ocorrencia_id}/anexos")
+def listar_anexos_ocorrencia(ocorrencia_id: int, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
+    _buscar_ocorrencia(banco, ocorrencia_id, usuario.condominio_id)
+    anexos = banco.query(AnexoOcorrencia).filter(AnexoOcorrencia.ocorrencia_id == ocorrencia_id).order_by(AnexoOcorrencia.criado_em.asc()).all()
+    return [_anexo_resposta(anexo, usuario) for anexo in anexos]
+
+
+@app.post("/ocorrencias/{ocorrencia_id}/anexos", status_code=201)
+async def enviar_anexos_ocorrencia(ocorrencia_id: int, arquivos: list[UploadFile] = File(...), banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
+    _buscar_ocorrencia(banco, ocorrencia_id, usuario.condominio_id)
+    if not 1 <= len(arquivos) <= 5:
+        raise HTTPException(422, "Envie de uma a cinco imagens por vez.")
+    preparados = []
+    for arquivo in arquivos:
+        if arquivo.content_type not in TIPOS_IMAGEM_ANEXO:
+            raise HTTPException(422, "Envie somente imagens JPEG, PNG ou WebP.")
+        conteudo = await arquivo.read(LIMITE_ANEXO_BYTES + 1)
+        if len(conteudo) > LIMITE_ANEXO_BYTES:
+            raise HTTPException(413, "Cada imagem pode ter no máximo 8 MB.")
+        nome = re.sub(r"[^A-Za-z0-9._ -]", "_", (arquivo.filename or "imagem").rsplit("/", 1)[-1].rsplit("\\", 1)[-1])[:255]
+        preparados.append((nome, arquivo.content_type, conteudo))
+    storage = obter_storage(banco, usuario.condominio_id)
+    salvos = []
+    for nome, mime_type, conteudo in preparados:
+        salvo = storage.salvar(f"/CondoHub/Anexos/Chamados/{ocorrencia_id}", nome, conteudo, mime_type)
+        anexo = AnexoOcorrencia(ocorrencia_id=ocorrencia_id, provedor=salvo.provedor, arquivo_externo_id=salvo.arquivo_id,
+                                armazenamento_id=salvo.armazenamento_id, nome=salvo.nome, mime_type=mime_type, tamanho=salvo.tamanho,
+                                autor_id=usuario.id, autor_nome=usuario.nome)
+        banco.add(anexo); banco.flush(); salvos.append(anexo)
+    banco.commit()
+    return [_anexo_resposta(anexo, usuario) for anexo in salvos]
+
+
+@app.get("/ocorrencias/{ocorrencia_id}/anexos/{anexo_id}/arquivo")
+def baixar_anexo_ocorrencia(ocorrencia_id: int, anexo_id: int, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
+    _buscar_ocorrencia(banco, ocorrencia_id, usuario.condominio_id)
+    anexo = banco.query(AnexoOcorrencia).filter(AnexoOcorrencia.id == anexo_id, AnexoOcorrencia.ocorrencia_id == ocorrencia_id).first()
+    if not anexo:
+        raise HTTPException(404, "Anexo não encontrado.")
+    arquivo = obter_storage(banco, usuario.condominio_id).baixar(anexo.armazenamento_id, anexo.arquivo_externo_id)
+    return Response(content=arquivo.content, media_type=anexo.mime_type, headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(anexo.nome)}", "Cache-Control": "private, max-age=300"})
+
+
+@app.delete("/ocorrencias/{ocorrencia_id}/anexos/{anexo_id}", status_code=204)
+def excluir_anexo_ocorrencia(ocorrencia_id: int, anexo_id: int, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
+    _buscar_ocorrencia(banco, ocorrencia_id, usuario.condominio_id)
+    anexo = banco.query(AnexoOcorrencia).filter(AnexoOcorrencia.id == anexo_id, AnexoOcorrencia.ocorrencia_id == ocorrencia_id).first()
+    if not anexo:
+        raise HTTPException(404, "Anexo não encontrado.")
+    if anexo.autor_id != usuario.id and usuario.papeis.isdisjoint(PAPEIS_COM_IDENTIDADE_DOS_CHAMADOS):
+        raise HTTPException(403, "Você não pode excluir este anexo.")
+    obter_storage(banco, usuario.condominio_id).excluir(anexo.armazenamento_id, anexo.arquivo_externo_id)
+    banco.delete(anexo); banco.commit()
+
+
 @app.get("/cronogramas")
 def listar_cronogramas(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
     itens = (
@@ -1603,6 +1680,10 @@ def excluir_meus_dados(
             MovimentoEstoque.autor_id: identificador_anonimo,
             MovimentoEstoque.autor_nome: nome_anonimo,
         },
+        synchronize_session=False,
+    )
+    banco.query(AnexoOcorrencia).filter(AnexoOcorrencia.autor_id == usuario.id).update(
+        {AnexoOcorrencia.autor_id: identificador_anonimo, AnexoOcorrencia.autor_nome: nome_anonimo},
         synchronize_session=False,
     )
     banco.commit()

@@ -126,6 +126,14 @@ def graph_get(token: str, caminho: str, *, seguir_redirecionamento: bool = False
     return resposta
 
 
+def graph_post(token: str, caminho: str, dados: dict) -> dict:
+    resposta = httpx.post(f"{GRAPH_URL}{caminho}", headers={"Authorization": f"Bearer {token}"}, json=dados, timeout=30)
+    if resposta.is_error:
+        detalhe = resposta.json().get("error", {}).get("message", "Falha ao gravar no OneDrive.")
+        raise HTTPException(status_code=502, detail=detalhe)
+    return resposta.json()
+
+
 def obter_perfil_drive(access_token: str) -> tuple[dict, dict]:
     perfil = graph_get(access_token, "/me?$select=id,displayName,mail,userPrincipalName").json()
     drive = graph_get(access_token, "/me/drive?$select=id,driveType,owner").json()
@@ -165,3 +173,36 @@ def baixar_arquivo(token: str, drive_id: str, item_id: str) -> httpx.Response:
         f"/drives/{quote(drive_id, safe='')}/items/{quote(item_id, safe='')}/content",
         seguir_redirecionamento=True,
     )
+
+
+def criar_caminho_pastas(token: str, drive_id: str, caminho: str) -> dict:
+    atual = graph_get(token, f"/drives/{quote(drive_id, safe='')}/root?$select=id,name").json()
+    for nome in [parte for parte in caminho.strip("/").split("/") if parte]:
+        codificado = quote(nome, safe="")
+        busca = httpx.get(f"{GRAPH_URL}/drives/{quote(drive_id, safe='')}/items/{quote(atual['id'], safe='')}:/{codificado}", headers={"Authorization": f"Bearer {token}"}, timeout=30)
+        if busca.status_code == 404:
+            atual = graph_post(token, f"/drives/{quote(drive_id, safe='')}/items/{quote(atual['id'], safe='')}/children", {"name": nome, "folder": {}, "@microsoft.graph.conflictBehavior": "fail"})
+        elif busca.is_error:
+            detalhe = busca.json().get("error", {}).get("message", "Falha ao localizar pasta no OneDrive.")
+            raise HTTPException(status_code=502, detail=detalhe)
+        else:
+            atual = busca.json()
+    return atual
+
+
+def enviar_arquivo(token: str, drive_id: str, pasta_id: str, nome: str, conteudo: bytes, mime_type: str) -> dict:
+    resposta = httpx.put(
+        f"{GRAPH_URL}/drives/{quote(drive_id, safe='')}/items/{quote(pasta_id, safe='')}:/{quote(nome, safe='')}:/content",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": mime_type}, content=conteudo, timeout=60,
+    )
+    if resposta.is_error:
+        detalhe = resposta.json().get("error", {}).get("message", "Falha ao enviar arquivo ao OneDrive.")
+        raise HTTPException(status_code=502, detail=detalhe)
+    return resposta.json()
+
+
+def excluir_arquivo(token: str, drive_id: str, item_id: str):
+    resposta = httpx.delete(f"{GRAPH_URL}/drives/{quote(drive_id, safe='')}/items/{quote(item_id, safe='')}", headers={"Authorization": f"Bearer {token}"}, timeout=30)
+    if resposta.status_code not in {204, 404}:
+        detalhe = resposta.json().get("error", {}).get("message", "Falha ao excluir arquivo do OneDrive.")
+        raise HTTPException(status_code=502, detail=detalhe)
