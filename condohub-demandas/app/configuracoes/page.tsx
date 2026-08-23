@@ -18,6 +18,7 @@ const descricoes: Record<string, string> = {
   agendamentos: "Permitir reservas dos ambientes disponíveis.",
   atas: "Disponibilizar as atas publicadas pela gestão.",
   acompanhamento: "Mostrar o andamento dos cronogramas publicados.",
+  financeiro: "Disponibilizar balancetes e orçamentos publicados pela gestão.",
 };
 
 export default function ConfiguracoesPage() {

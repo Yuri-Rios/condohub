@@ -145,6 +145,7 @@ class PedidoCompraCriar(BaseModel):
     unidade: str = Field(min_length=1, max_length=30)
     justificativa: str = Field(min_length=3, max_length=4000)
     valor_estimado: float | None = Field(default=None, ge=0)
+    data_compra: date = Field(default_factory=date.today)
 
 
 class PedidoCompraStatus(BaseModel):
@@ -180,6 +181,32 @@ class MovimentoEstoqueCriar(BaseModel):
     def validar_tipo(cls, valor: str):
         if valor not in {"entrada", "saida"}:
             raise ValueError("Tipo de movimento inválido.")
+        return valor
+
+
+class PatrimonioCriar(BaseModel):
+    nome: str = Field(min_length=2, max_length=160)
+    categoria: str = Field(min_length=2, max_length=80)
+    localizacao: str = Field(min_length=2, max_length=160)
+    descricao: str | None = Field(default=None, max_length=2000)
+    valor_aquisicao: float | None = Field(default=None, ge=0)
+    data_aquisicao: date = Field(default_factory=date.today)
+    nota_fiscal: str | None = Field(default=None, max_length=100)
+    estado: str = "bom"
+    foto_data_url: str | None = Field(default=None, max_length=2_500_000)
+
+    @field_validator("estado")
+    @classmethod
+    def validar_estado(cls, valor: str):
+        if valor not in {"novo", "bom", "regular", "manutencao"}:
+            raise ValueError("Estado de conservação inválido.")
+        return valor
+
+    @field_validator("foto_data_url")
+    @classmethod
+    def validar_foto(cls, valor: str | None):
+        if valor and not valor.startswith("data:image/"):
+            raise ValueError("Formato de foto inválido.")
         return valor
 
 
@@ -416,6 +443,18 @@ class PastaOneDriveConfigurar(BaseModel):
         if any(parte in {".", ".."} for parte in partes):
             raise ValueError("Caminho inválido.")
         return "/" + "/".join(partes) if partes else "/"
+
+
+class DocumentoFinanceiroAtualizar(BaseModel):
+    titulo: str = Field(min_length=3, max_length=255)
+    competencia: date | None = None
+    descricao: str | None = Field(default=None, max_length=4000)
+    publicado: bool
+
+    @field_validator("titulo")
+    @classmethod
+    def limpar_titulo(cls, valor: str):
+        return valor.strip()
 
 
 class AtaAtualizar(BaseModel):

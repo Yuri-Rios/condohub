@@ -154,6 +154,7 @@ class PedidoCompra(Base):
     unidade = Column(String(30), nullable=False)
     justificativa = Column(Text, nullable=False)
     valor_estimado = Column(Numeric(12, 2), nullable=True)
+    data_compra = Column(Date, nullable=False)
     status = Column(String(30), nullable=False, default="create", index=True)
     solicitante_id = Column(String(255), nullable=False, index=True)
     solicitante_nome = Column(String(160), nullable=False)
@@ -195,6 +196,57 @@ class MovimentoEstoque(Base):
     pedido_id = Column(Integer, ForeignKey("pedidos_compra.id", ondelete="SET NULL"), nullable=True)
     autor_id = Column(String(255), nullable=False)
     autor_nome = Column(String(160), nullable=False)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
+class Patrimonio(Base):
+    __tablename__ = "patrimonios"
+    __table_args__ = (
+        UniqueConstraint("condominio_id", "numero", name="uq_patrimonio_condominio_numero"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(Integer, ForeignKey("condominios.id", ondelete="CASCADE"), nullable=False, index=True)
+    numero = Column(String(30), nullable=True)
+    nome = Column(String(160), nullable=False)
+    categoria = Column(String(80), nullable=False)
+    localizacao = Column(String(160), nullable=False)
+    descricao = Column(Text, nullable=True)
+    valor_aquisicao = Column(Numeric(12, 2), nullable=True)
+    data_aquisicao = Column(Date, nullable=False)
+    nota_fiscal = Column(String(100), nullable=True)
+    estado = Column(String(30), nullable=False, default="bom")
+    foto_data_url = Column(Text, nullable=True)
+    cadastrado_por_id = Column(String(255), nullable=False)
+    cadastrado_por_nome = Column(String(160), nullable=False)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
+class AnexoPedidoCompra(Base):
+    __tablename__ = "anexos_pedido_compra"
+    id = Column(Integer, primary_key=True)
+    pedido_id = Column(Integer, ForeignKey("pedidos_compra.id", ondelete="CASCADE"), nullable=False, index=True)
+    provedor = Column(String(30), nullable=False)
+    arquivo_externo_id = Column(String(255), nullable=False)
+    armazenamento_id = Column(String(255), nullable=False)
+    nome = Column(String(255), nullable=False)
+    mime_type = Column(String(100), nullable=False)
+    tamanho = Column(Integer, nullable=False)
+    autor_id = Column(String(255), nullable=False)
+    criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
+class FotoPatrimonio(Base):
+    __tablename__ = "fotos_patrimonio"
+    __table_args__ = (UniqueConstraint("patrimonio_id", name="uq_foto_patrimonio"),)
+    id = Column(Integer, primary_key=True)
+    patrimonio_id = Column(Integer, ForeignKey("patrimonios.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    provedor = Column(String(30), nullable=False)
+    arquivo_externo_id = Column(String(255), nullable=False)
+    armazenamento_id = Column(String(255), nullable=False)
+    nome = Column(String(255), nullable=False)
+    mime_type = Column(String(100), nullable=False)
+    tamanho = Column(Integer, nullable=False)
+    autor_id = Column(String(255), nullable=False)
     criado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
 
 
@@ -391,6 +443,10 @@ class IntegracaoOneDrive(Base):
     conectado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
     ultima_sincronizacao_em = Column(DateTime(timezone=True), nullable=True)
     erro_ultima_sincronizacao = Column(Text, nullable=True)
+    balancetes_root_item_id = Column(String(255), nullable=True)
+    balancetes_root_path = Column(Text, nullable=True)
+    orcamentos_root_item_id = Column(String(255), nullable=True)
+    orcamentos_root_path = Column(Text, nullable=True)
 
 
 class Ata(Base):
@@ -413,6 +469,30 @@ class Ata(Base):
     etag = Column(Text, nullable=True)
     modificado_em = Column(DateTime(timezone=True), nullable=True)
     publicada = Column(Boolean, nullable=False, default=False, index=True)
+    publicado_em = Column(DateTime(timezone=True), nullable=True)
+    publicado_por = Column(String(255), nullable=True)
+    importado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)
+
+
+class DocumentoFinanceiro(Base):
+    __tablename__ = "documentos_financeiros"
+    __table_args__ = (
+        UniqueConstraint("condominio_id", "tipo", "drive_id", "drive_item_id", name="uq_documento_financeiro_item"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    condominio_id = Column(Integer, ForeignKey("condominios.id", ondelete="CASCADE"), nullable=False, index=True)
+    tipo = Column(String(30), nullable=False, index=True)
+    titulo = Column(String(255), nullable=False)
+    competencia = Column(Date, nullable=True)
+    descricao = Column(Text, nullable=True)
+    drive_id = Column(String(255), nullable=False)
+    drive_item_id = Column(String(255), nullable=False)
+    nome_arquivo = Column(String(255), nullable=False)
+    mime_type = Column(String(160), nullable=True)
+    tamanho = Column(Integer, nullable=True)
+    etag = Column(Text, nullable=True)
+    modificado_em = Column(DateTime(timezone=True), nullable=True)
+    publicado = Column(Boolean, nullable=False, default=False, index=True)
     publicado_em = Column(DateTime(timezone=True), nullable=True)
     publicado_por = Column(String(255), nullable=True)
     importado_em = Column(DateTime(timezone=True), default=agora_no_brasil, nullable=False)

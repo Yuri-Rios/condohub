@@ -100,6 +100,7 @@ export default function Navbar() {
       ? [{ href: "/agendamentos", label: "Agendamentos" }]
       : []),
     ...(podeAcessarModulo("atas") ? [{ href: "/atas", label: "Atas" }] : []),
+    ...(podeAcessarModulo("financeiro") ? [{ href: "/balancetes", label: "Balancetes" }, { href: "/orcamentos", label: "Orçamentos" }] : []),
     ...(podeAcessarModulo("acompanhamento") ? [{ href: "/acompanhamento", label: "Acompanhamento" }] : []),
   ];
   const itensGestao: ItemMenu[] = podeAdministrar
@@ -114,9 +115,10 @@ export default function Navbar() {
           : []),
         ...(podeAcessarModulo("compras") ? [{ href: "/pedidos-compra", label: "Compras" }] : []),
         ...(podeAcessarModulo("estoque") ? [{ href: "/estoque", label: "Estoque" }] : []),
+        ...(podeAcessarModulo("patrimonio") ? [{ href: "/patrimonio", label: "Patrimônio" }] : []),
         ...(podeAcessarModulo("prestadores") ? [{ href: "/prestadores", label: "Prestadores" }] : []),
         ...(podeAcessarModulo("cronogramas") ? [{ href: "/cronogramas", label: "Cronogramas" }] : []),
-        ...(podeAcessarModulo("atas") ? [{ href: "/administracao/onedrive", label: "OneDrive" }] : []),
+        ...(podeAcessarModulo("atas") || podeAcessarModulo("financeiro") ? [{ href: "/administracao/onedrive", label: "OneDrive" }] : []),
         ...(podeConfigurar ? [{ href: "/configuracoes", label: "Configurações" }] : []),
       ]
     : [];

@@ -12,6 +12,7 @@ type Integracao = {
   pasta?: string;
   ultima_sincronizacao_em?: string | null;
   erro_ultima_sincronizacao?: string | null;
+  pastas?: { atas?: string | null; balancete?: string | null; orcamento?: string | null };
 };
 
 export default function OneDrivePage() {
@@ -19,6 +20,8 @@ export default function OneDrivePage() {
   const podeConectar = acesso?.papeis.some((papel) => ["sindico", "admin"].includes(papel)) ?? false;
   const [integracao, setIntegracao] = useState<Integracao | null>(null);
   const [pasta, setPasta] = useState("/Atas");
+  const [pastaBalancetes, setPastaBalancetes] = useState("/Balancetes");
+  const [pastaOrcamentos, setPastaOrcamentos] = useState("/Orçamentos");
   const [erro, setErro] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -32,6 +35,8 @@ export default function OneDrivePage() {
     }
     setIntegracao(dados);
     if (dados.pasta) setPasta(dados.pasta);
+    if (dados.pastas?.balancete) setPastaBalancetes(dados.pastas.balancete);
+    if (dados.pastas?.orcamento) setPastaOrcamentos(dados.pastas.orcamento);
   }
 
   useEffect(() => {
@@ -42,6 +47,8 @@ export default function OneDrivePage() {
         else {
           setIntegracao(dados);
           if (dados.pasta) setPasta(dados.pasta);
+          if (dados.pastas?.balancete) setPastaBalancetes(dados.pastas.balancete);
+          if (dados.pastas?.orcamento) setPastaOrcamentos(dados.pastas.orcamento);
         }
         const estado = new URLSearchParams(window.location.search).get("onedrive");
         if (estado === "conectado") setMensagem("Conta Microsoft conectada. Agora confirme a pasta das atas.");
@@ -97,6 +104,22 @@ export default function OneDrivePage() {
     await carregar();
   }
 
+  async function salvarPastaFinanceira(tipo: "balancete" | "orcamento", caminho: string) {
+    setOcupado(true); setErro(""); setMensagem("");
+    const resposta = await fetch(`/api/integracoes/onedrive/pastas/${tipo}`, { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({caminho}) });
+    const dados = await resposta.json(); setOcupado(false);
+    if (!resposta.ok) { setErro(dados.detail ?? "Pasta não encontrada no OneDrive."); return; }
+    setIntegracao(dados); setMensagem(`Pasta de ${tipo === "balancete" ? "balancetes" : "orçamentos"} configurada.`);
+  }
+
+  async function sincronizarFinanceiro(tipo: "balancete" | "orcamento") {
+    setOcupado(true); setErro(""); setMensagem("");
+    const resposta = await fetch(`/api/documentos-financeiros/${tipo}/sincronizar`, { method:"POST" });
+    const dados = await resposta.json(); setOcupado(false);
+    if (!resposta.ok) { setErro(dados.detail ?? "Falha na sincronização."); return; }
+    setMensagem(`${dados.importados} novo(s) documento(s) importado(s) e ${dados.atualizados} atualizado(s).`); await carregar();
+  }
+
   async function desconectar() {
     if (!window.confirm("Desconectar o OneDrive? As atas já catalogadas permanecerão, mas os arquivos não poderão ser abertos.")) return;
     const resposta = await fetch("/api/integracoes/onedrive", { method: "DELETE" });
@@ -113,7 +136,7 @@ export default function OneDrivePage() {
     <main className="min-h-screen px-4 py-3 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
         <Navbar />
-        <Titulo texto="OneDrive das atas" subtitulo="Conecte a conta do condomínio e importe documentos sem transferir sua propriedade para o CondoHub." />
+        <Titulo texto="Documentos no OneDrive" subtitulo="Integre atas, balancetes e orçamentos sem transferir a propriedade dos arquivos para o CondoHub." />
 
         {erro && <p className="mt-6 rounded-xl bg-rose-50 p-4 text-rose-700">{erro}</p>}
         {mensagem && <p className="mt-6 rounded-xl bg-emerald-50 p-4 text-emerald-700">{mensagem}</p>}
@@ -151,10 +174,15 @@ export default function OneDrivePage() {
                 </div>
               </form>
 
+              <div className="grid gap-4 md:grid-cols-2">
+                <section className="rounded-xl border border-slate-200 p-4"><h3 className="font-bold text-slate-900">Balancetes</h3><p className="mt-1 text-xs text-slate-500">PDF, Word ou Excel; busca recursiva.</p><input value={pastaBalancetes} onChange={(e)=>setPastaBalancetes(e.target.value)} className="input mt-3" placeholder="/Balancetes"/><div className="mt-3 flex flex-wrap gap-2">{podeConectar&&<button type="button" disabled={ocupado} onClick={()=>void salvarPastaFinanceira("balancete",pastaBalancetes)} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Salvar pasta</button>}<button type="button" disabled={ocupado||!integracao.pastas?.balancete} onClick={()=>void sincronizarFinanceiro("balancete")} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Sincronizar</button></div></section>
+                <section className="rounded-xl border border-slate-200 p-4"><h3 className="font-bold text-slate-900">Orçamentos</h3><p className="mt-1 text-xs text-slate-500">PDF, Word ou Excel; busca recursiva.</p><input value={pastaOrcamentos} onChange={(e)=>setPastaOrcamentos(e.target.value)} className="input mt-3" placeholder="/Orçamentos"/><div className="mt-3 flex flex-wrap gap-2">{podeConectar&&<button type="button" disabled={ocupado} onClick={()=>void salvarPastaFinanceira("orcamento",pastaOrcamentos)} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Salvar pasta</button>}<button type="button" disabled={ocupado||!integracao.pastas?.orcamento} onClick={()=>void sincronizarFinanceiro("orcamento")} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Sincronizar</button></div></section>
+              </div>
+
               {integracao.erro_ultima_sincronizacao && <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800">Último erro: {integracao.erro_ultima_sincronizacao}</p>}
               <div>
                 <button disabled={ocupado || integracao.pasta === "/"} onClick={() => void sincronizar()} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white disabled:opacity-50">
-                  {ocupado ? "Processando…" : "Sincronizar agora"}
+                  {ocupado ? "Processando…" : "Sincronizar atas"}
                 </button>
                 {integracao.pasta === "/" && <p className="mt-2 text-xs text-amber-700">Escolha a pasta das atas antes da primeira sincronização.</p>}
               </div>

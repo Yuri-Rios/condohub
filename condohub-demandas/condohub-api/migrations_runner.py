@@ -15,6 +15,10 @@ MIGRACOES_MULTITENANT = (
     "014_modulos_condominio.sql",
     "015_modelos_cronograma.sql",
     "016_anexos_ocorrencias.sql",
+    "017_patrimonios.sql",
+    "018_data_compra_pedidos.sql",
+    "019_fotos_compras_patrimonios.sql",
+    "020_documentos_financeiros.sql",
 )
 
 

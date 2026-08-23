@@ -5,7 +5,7 @@ import re
 import time
 from urllib.parse import quote
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from enum import Enum
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
@@ -32,9 +32,11 @@ from database import Base, engine, pegar_banco
 from migrations_runner import aplicar_migracoes_multitenant
 from models import (
     AdministradorPlataforma,
+    AnexoPedidoCompra,
     AnexoOcorrencia,
     Ata,
     Condominio,
+    DocumentoFinanceiro,
     Cronograma,
     EtapaCronograma,
     EtapaModeloCronograma,
@@ -48,6 +50,8 @@ from models import (
     ItemEstoque,
     IntegracaoOneDrive,
     MovimentoEstoque,
+    Patrimonio,
+    FotoPatrimonio,
     NotificacaoOcorrencia,
     Ocorrencia,
     PedidoCompra,
@@ -58,6 +62,7 @@ from models import (
 )
 from schemas import (
     CondominioCriar,
+    DocumentoFinanceiroAtualizar,
     ModuloHabilitacao,
     ModuloVisibilidade,
     CronogramaCriar,
@@ -77,6 +82,7 @@ from schemas import (
     AtendimentoPrestadorCriar,
     ItemEstoqueCriar,
     MovimentoEstoqueCriar,
+    PatrimonioCriar,
     PedidoCompraCriar,
     PedidoCompraStatus,
     PrestadorCriar,
@@ -119,9 +125,11 @@ CATALOGO_MODULOS = (
     ("chamados", "Chamados", True),
     ("agendamentos", "Agendamentos", True),
     ("atas", "Atas", True),
+    ("financeiro", "Balancetes e orçamentos", True),
     ("acompanhamento", "Acompanhamento", True),
     ("compras", "Compras", False),
     ("estoque", "Estoque", False),
+    ("patrimonio", "Patrimônio", False),
     ("prestadores", "Prestadores", False),
     ("cronogramas", "Cronogramas", False),
 )
@@ -251,6 +259,11 @@ def _integracao_resposta(integracao: IntegracaoOneDrive | None):
         "status": integracao.status,
         "email": integracao.microsoft_email,
         "pasta": integracao.root_path,
+        "pastas": {
+            "atas": integracao.root_path,
+            "balancete": integracao.balancetes_root_path,
+            "orcamento": integracao.orcamentos_root_path,
+        },
         "ultima_sincronizacao_em": integracao.ultima_sincronizacao_em,
         "erro_ultima_sincronizacao": integracao.erro_ultima_sincronizacao,
     }
@@ -361,6 +374,23 @@ def configurar_pasta_onedrive(dados: PastaOneDriveConfigurar, banco: Session = D
     return _integracao_resposta(integracao)
 
 
+@app.put("/integracoes/onedrive/pastas/{tipo}")
+def configurar_pasta_documento(tipo: str, dados: PastaOneDriveConfigurar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_aprovador)):
+    if tipo not in {"balancete", "orcamento"}:
+        raise HTTPException(404, detail="Tipo de documento inválido.")
+    integracao = _integracao_onedrive(banco, usuario.condominio_id)
+    pasta = resolver_pasta(renovar_token(integracao), dados.caminho)
+    if tipo == "balancete":
+        integracao.balancetes_root_item_id = pasta["id"]
+        integracao.balancetes_root_path = dados.caminho
+    else:
+        integracao.orcamentos_root_item_id = pasta["id"]
+        integracao.orcamentos_root_path = dados.caminho
+    integracao.status = "ativa"; integracao.erro_ultima_sincronizacao = None
+    banco.commit()
+    return _integracao_resposta(integracao)
+
+
 @app.delete("/integracoes/onedrive", status_code=204)
 def desconectar_onedrive(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_aprovador)):
     integracao = _integracao_onedrive(banco, usuario.condominio_id)
@@ -464,6 +494,99 @@ def obter_arquivo_ata(ata_id: int, banco: Session = Depends(pegar_banco), usuari
     banco.commit()
     nome_seguro = ata.nome_arquivo.replace('"', "")
     return Response(content=arquivo.content, media_type=ata.mime_type or arquivo.headers.get("content-type", "application/octet-stream"), headers={"Content-Disposition": f'inline; filename="{nome_seguro}"'})
+
+
+def _documento_financeiro_resposta(documento: DocumentoFinanceiro, pode_gerenciar: bool):
+    return {"id": documento.id, "tipo": documento.tipo, "titulo": documento.titulo,
+            "competencia": documento.competencia, "descricao": documento.descricao,
+            "nome_arquivo": documento.nome_arquivo, "mime_type": documento.mime_type,
+            "tamanho": documento.tamanho, "modificado_em": documento.modificado_em,
+            "publicado": documento.publicado, "pode_gerenciar": pode_gerenciar}
+
+
+def _metadados_documento_financeiro(nome_arquivo: str):
+    base = nome_arquivo.rsplit(".", 1)[0]
+    titulo = re.sub(r"[_-]+", " ", base).strip()
+    competencia = None
+    correspondencia = re.search(r"(?<!\d)(\d{2})[-_.](\d{4})(?!\d)", base)
+    if correspondencia:
+        try: competencia = date(int(correspondencia[2]), int(correspondencia[1]), 1)
+        except ValueError: pass
+    if not competencia:
+        correspondencia = re.search(r"(?<!\d)(\d{4})[-_.](\d{2})(?!\d)", base)
+        if correspondencia:
+            try: competencia = date(int(correspondencia[1]), int(correspondencia[2]), 1)
+            except ValueError: pass
+    return titulo, competencia
+
+
+@app.post("/documentos-financeiros/{tipo}/sincronizar")
+def sincronizar_documentos_financeiros(tipo: str, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    if tipo not in {"balancete", "orcamento"}: raise HTTPException(404, "Tipo de documento inválido.")
+    integracao = _integracao_onedrive(banco, usuario.condominio_id)
+    pasta_id = integracao.balancetes_root_item_id if tipo == "balancete" else integracao.orcamentos_root_item_id
+    if not pasta_id: raise HTTPException(422, f"Configure a pasta de {'balancetes' if tipo == 'balancete' else 'orçamentos'}.")
+    try:
+        arquivos = listar_arquivos(renovar_token(integracao), integracao.drive_id, pasta_id)
+        importados = atualizados = 0; extensoes = {".pdf", ".doc", ".docx", ".xls", ".xlsx"}
+        for arquivo in arquivos:
+            nome = arquivo.get("name", "")
+            if not any(nome.lower().endswith(extensao) for extensao in extensoes): continue
+            documento = banco.query(DocumentoFinanceiro).filter(
+                DocumentoFinanceiro.condominio_id == usuario.condominio_id, DocumentoFinanceiro.tipo == tipo,
+                DocumentoFinanceiro.drive_id == integracao.drive_id, DocumentoFinanceiro.drive_item_id == arquivo["id"]).first()
+            modificado = datetime.fromisoformat(arquivo["lastModifiedDateTime"].replace("Z", "+00:00")) if arquivo.get("lastModifiedDateTime") else None
+            if documento:
+                documento.nome_arquivo = nome; documento.mime_type = arquivo.get("file", {}).get("mimeType")
+                documento.tamanho = arquivo.get("size"); documento.etag = arquivo.get("eTag"); documento.modificado_em = modificado
+                atualizados += 1
+            else:
+                titulo, competencia = _metadados_documento_financeiro(nome)
+                banco.add(DocumentoFinanceiro(condominio_id=usuario.condominio_id, tipo=tipo, titulo=titulo,
+                    competencia=competencia, drive_id=integracao.drive_id, drive_item_id=arquivo["id"], nome_arquivo=nome,
+                    mime_type=arquivo.get("file", {}).get("mimeType"), tamanho=arquivo.get("size"),
+                    etag=arquivo.get("eTag"), modificado_em=modificado, publicado=False))
+                importados += 1
+        integracao.ultima_sincronizacao_em = datetime.now(FUSO_BRASIL); integracao.erro_ultima_sincronizacao = None
+        banco.commit()
+        return {"importados": importados, "atualizados": atualizados, "encontrados": len(arquivos)}
+    except HTTPException as erro:
+        banco.rollback(); integracao = _integracao_onedrive(banco, usuario.condominio_id)
+        if erro.status_code == 401: integracao.status = "requer_reconexao"
+        integracao.erro_ultima_sincronizacao = str(erro.detail); banco.commit(); raise
+
+
+@app.get("/documentos-financeiros")
+def listar_documentos_financeiros(tipo: str, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
+    if tipo not in {"balancete", "orcamento"}: raise HTTPException(422, "Tipo de documento inválido.")
+    pode_gerenciar = not usuario.papeis.isdisjoint({"sindico", "subsindico", "funcionario", "admin"})
+    consulta = banco.query(DocumentoFinanceiro).filter(DocumentoFinanceiro.condominio_id == usuario.condominio_id, DocumentoFinanceiro.tipo == tipo)
+    if not pode_gerenciar: consulta = consulta.filter(DocumentoFinanceiro.publicado.is_(True))
+    documentos = consulta.order_by(DocumentoFinanceiro.competencia.desc().nullslast(), DocumentoFinanceiro.modificado_em.desc()).all()
+    return [_documento_financeiro_resposta(documento, pode_gerenciar) for documento in documentos]
+
+
+@app.put("/documentos-financeiros/{documento_id}")
+def atualizar_documento_financeiro(documento_id: int, dados: DocumentoFinanceiroAtualizar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    documento = banco.query(DocumentoFinanceiro).filter(DocumentoFinanceiro.id == documento_id, DocumentoFinanceiro.condominio_id == usuario.condominio_id).first()
+    if not documento: raise HTTPException(404, "Documento não encontrado.")
+    estava_publicado = documento.publicado; documento.titulo = dados.titulo; documento.competencia = dados.competencia
+    documento.descricao = dados.descricao; documento.publicado = dados.publicado
+    if dados.publicado and not estava_publicado: documento.publicado_em = datetime.now(FUSO_BRASIL); documento.publicado_por = usuario.id
+    elif not dados.publicado: documento.publicado_em = None; documento.publicado_por = None
+    banco.commit(); banco.refresh(documento)
+    return _documento_financeiro_resposta(documento, True)
+
+
+@app.get("/documentos-financeiros/{documento_id}/arquivo")
+def obter_arquivo_documento_financeiro(documento_id: int, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
+    documento = banco.query(DocumentoFinanceiro).filter(DocumentoFinanceiro.id == documento_id, DocumentoFinanceiro.condominio_id == usuario.condominio_id).first()
+    pode_gerenciar = not usuario.papeis.isdisjoint({"sindico", "subsindico", "funcionario", "admin"})
+    if not documento or (not documento.publicado and not pode_gerenciar): raise HTTPException(404, "Documento não encontrado.")
+    integracao = _integracao_onedrive(banco, usuario.condominio_id)
+    arquivo = baixar_arquivo(renovar_token(integracao), documento.drive_id, documento.drive_item_id); banco.commit()
+    nome_seguro = documento.nome_arquivo.replace('"', "")
+    return Response(content=arquivo.content, media_type=documento.mime_type or arquivo.headers.get("content-type", "application/octet-stream"), headers={"Content-Disposition": f'inline; filename="{nome_seguro}"'})
 
 
 def _validar_data_reserva(inicio: datetime):
@@ -1109,15 +1232,19 @@ def _pedido_resposta(pedido: PedidoCompra, banco: Session, usuario: ContextoCond
     )
     pode_gerenciar = not usuario.papeis.isdisjoint({"sindico", "admin"})
     pode_editar = pedido.status != "done" and (pedido.solicitante_id == usuario.id or pode_gerenciar)
+    anexos = banco.query(AnexoPedidoCompra).filter(AnexoPedidoCompra.pedido_id == pedido.id).order_by(AnexoPedidoCompra.id.asc()).all()
     return {
         "id": pedido.id, "ocorrencia_id": pedido.ocorrencia_id, "item": pedido.item, "quantidade": float(pedido.quantidade),
         "unidade": pedido.unidade, "justificativa": pedido.justificativa,
         "valor_estimado": float(pedido.valor_estimado) if pedido.valor_estimado is not None else None,
+        "data_compra": pedido.data_compra,
         "status": pedido.status, "solicitante_nome": pedido.solicitante_nome,
         "criado_em": pedido.criado_em, "atualizado_em": pedido.atualizado_em,
         "pode_gerenciar": pode_gerenciar,
         "pode_editar": pode_editar,
         "pode_excluir": pode_editar,
+        "anexos": [{"id": a.id, "nome": a.nome, "mime_type": a.mime_type, "tamanho": a.tamanho,
+                    "url": f"/api/pedidos-compra/{pedido.id}/anexos/{a.id}/arquivo"} for a in anexos],
         "historico": [{"id": h.id, "status": h.status, "observacao": h.observacao,
                        "autor_nome": h.autor_nome, "criado_em": h.criado_em} for h in historico],
     }
@@ -1135,6 +1262,7 @@ def criar_pedido_compra(dados: PedidoCompraCriar, banco: Session = Depends(pegar
         raise HTTPException(422, "Chamado inválido.")
     pedido = PedidoCompra(condominio_id=usuario.condominio_id, ocorrencia_id=dados.ocorrencia_id, item=dados.item.strip(), quantidade=dados.quantidade,
                           unidade=dados.unidade.strip(), justificativa=dados.justificativa.strip(), valor_estimado=dados.valor_estimado,
+                          data_compra=dados.data_compra,
                           solicitante_id=usuario.id, solicitante_nome=usuario.nome)
     banco.add(pedido); banco.flush()
     banco.add(HistoricoPedidoCompra(pedido_id=pedido.id, status="create", observacao="Pedido criado.", autor_id=usuario.id, autor_nome=usuario.nome))
@@ -1153,7 +1281,7 @@ def editar_pedido_compra(pedido_id: int, dados: PedidoCompraCriar, banco: Sessio
         raise HTTPException(422, "Chamado inválido.")
     pedido.ocorrencia_id = dados.ocorrencia_id; pedido.item = dados.item.strip()
     pedido.quantidade = dados.quantidade; pedido.unidade = dados.unidade.strip()
-    pedido.justificativa = dados.justificativa.strip(); pedido.valor_estimado = dados.valor_estimado
+    pedido.justificativa = dados.justificativa.strip(); pedido.valor_estimado = dados.valor_estimado; pedido.data_compra = dados.data_compra
     pedido.atualizado_em = datetime.now(FUSO_BRASIL)
     banco.add(HistoricoPedidoCompra(pedido_id=pedido.id, status=pedido.status, observacao="Dados do pedido editados.", autor_id=usuario.id, autor_nome=usuario.nome))
     banco.commit(); banco.refresh(pedido)
@@ -1200,11 +1328,15 @@ def alterar_status_pedido(pedido_id: int, dados: PedidoCompraStatus, banco: Sess
 
 def _item_estoque_resposta(item: ItemEstoque, banco: Session):
     movimentos = banco.query(MovimentoEstoque).filter(MovimentoEstoque.item_id == item.id).order_by(MovimentoEstoque.id.desc()).all()
+    datas_compra = {pedido.id: pedido.data_compra for pedido in banco.query(PedidoCompra).filter(
+        PedidoCompra.id.in_([m.pedido_id for m in movimentos if m.pedido_id is not None])
+    ).all()} if any(m.pedido_id is not None for m in movimentos) else {}
     return {"id": item.id, "nome": item.nome, "unidade": item.unidade, "quantidade": float(item.quantidade),
             "estoque_minimo": float(item.estoque_minimo) if item.estoque_minimo is not None else None,
             "localizacao": item.localizacao, "criado_em": item.criado_em,
             "movimentos": [{"id": m.id, "tipo": m.tipo, "quantidade": float(m.quantidade), "observacao": m.observacao,
-                             "ocorrencia_id": m.ocorrencia_id, "pedido_id": m.pedido_id, "autor_nome": m.autor_nome,
+                             "ocorrencia_id": m.ocorrencia_id, "pedido_id": m.pedido_id,
+                             "data_compra": datas_compra.get(m.pedido_id), "autor_nome": m.autor_nome,
                              "criado_em": m.criado_em} for m in movimentos]}
 
 
@@ -1241,6 +1373,101 @@ def movimentar_estoque(item_id: int, dados: MovimentoEstoqueCriar, banco: Sessio
                               ocorrencia_id=dados.ocorrencia_id, pedido_id=dados.pedido_id, autor_id=usuario.id, autor_nome=usuario.nome))
     banco.commit(); banco.refresh(item)
     return _item_estoque_resposta(item, banco)
+
+
+def _patrimonio_resposta(item: Patrimonio, banco: Session):
+    foto = banco.query(FotoPatrimonio).filter(FotoPatrimonio.patrimonio_id == item.id).first()
+    return {"id": item.id, "numero": item.numero, "nome": item.nome, "categoria": item.categoria,
+            "localizacao": item.localizacao, "descricao": item.descricao,
+            "valor_aquisicao": float(item.valor_aquisicao) if item.valor_aquisicao is not None else None,
+            "data_aquisicao": item.data_aquisicao, "nota_fiscal": item.nota_fiscal, "estado": item.estado,
+            "foto_data_url": item.foto_data_url, "foto_url": f"/api/patrimonios/{item.id}/foto/arquivo" if foto else None,
+            "cadastrado_por_nome": item.cadastrado_por_nome,
+            "criado_em": item.criado_em}
+
+
+@app.get("/patrimonios")
+def listar_patrimonios(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    itens = banco.query(Patrimonio).filter(Patrimonio.condominio_id == usuario.condominio_id).order_by(Patrimonio.id.desc()).all()
+    return [_patrimonio_resposta(item, banco) for item in itens]
+
+
+@app.post("/patrimonios", status_code=201)
+def criar_patrimonio(dados: PatrimonioCriar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    item = Patrimonio(condominio_id=usuario.condominio_id, nome=dados.nome.strip(), categoria=dados.categoria.strip(),
+                      localizacao=dados.localizacao.strip(), descricao=dados.descricao.strip() if dados.descricao else None,
+                      valor_aquisicao=dados.valor_aquisicao, data_aquisicao=dados.data_aquisicao,
+                      nota_fiscal=dados.nota_fiscal.strip() if dados.nota_fiscal else None, estado=dados.estado,
+                      foto_data_url=dados.foto_data_url, cadastrado_por_id=usuario.id, cadastrado_por_nome=usuario.nome)
+    banco.add(item); banco.flush()
+    item.numero = f"PAT-{datetime.now(FUSO_BRASIL).year}-{item.id:05d}"
+    banco.commit(); banco.refresh(item)
+    return _patrimonio_resposta(item, banco)
+
+
+def _validar_imagem(nome_original: str | None, mime_type: str | None, conteudo: bytes):
+    if mime_type not in TIPOS_IMAGEM_ANEXO:
+        raise HTTPException(422, "Envie somente imagens JPEG, PNG ou WebP.")
+    if len(conteudo) > LIMITE_ANEXO_BYTES:
+        raise HTTPException(413, "Cada imagem pode ter no máximo 8 MB.")
+    return re.sub(r"[^A-Za-z0-9._ -]", "_", (nome_original or "imagem").rsplit("/", 1)[-1].rsplit("\\", 1)[-1])[:255]
+
+
+@app.post("/patrimonios/{patrimonio_id}/foto", status_code=201)
+async def enviar_foto_patrimonio(patrimonio_id: int, arquivo: UploadFile = File(...), banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    item = banco.query(Patrimonio).filter(Patrimonio.id == patrimonio_id, Patrimonio.condominio_id == usuario.condominio_id).first()
+    if not item: raise HTTPException(404, "Patrimônio não encontrado.")
+    conteudo = await arquivo.read(LIMITE_ANEXO_BYTES + 1); nome = _validar_imagem(arquivo.filename, arquivo.content_type, conteudo)
+    storage = obter_storage(banco, usuario.condominio_id)
+    anterior = banco.query(FotoPatrimonio).filter(FotoPatrimonio.patrimonio_id == item.id).first()
+    salvo = storage.salvar(f"/CondoHub/Patrimonios/{item.numero}", nome, conteudo, arquivo.content_type)
+    if anterior:
+        storage.excluir(anterior.armazenamento_id, anterior.arquivo_externo_id); banco.delete(anterior)
+    banco.add(FotoPatrimonio(patrimonio_id=item.id, provedor=salvo.provedor, arquivo_externo_id=salvo.arquivo_id,
+                            armazenamento_id=salvo.armazenamento_id, nome=salvo.nome, mime_type=arquivo.content_type,
+                            tamanho=salvo.tamanho, autor_id=usuario.id))
+    item.foto_data_url = None; banco.commit()
+    return _patrimonio_resposta(item, banco)
+
+
+@app.get("/patrimonios/{patrimonio_id}/foto/arquivo")
+def baixar_foto_patrimonio(patrimonio_id: int, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    item = banco.query(Patrimonio).filter(Patrimonio.id == patrimonio_id, Patrimonio.condominio_id == usuario.condominio_id).first()
+    if not item: raise HTTPException(404, "Patrimônio não encontrado.")
+    foto = banco.query(FotoPatrimonio).filter(FotoPatrimonio.patrimonio_id == item.id).first()
+    if not foto: raise HTTPException(404, "Foto não encontrada.")
+    arquivo = obter_storage(banco, usuario.condominio_id).baixar(foto.armazenamento_id, foto.arquivo_externo_id)
+    return Response(content=arquivo.content, media_type=foto.mime_type, headers={"Cache-Control": "private, max-age=300"})
+
+
+@app.post("/pedidos-compra/{pedido_id}/anexos", status_code=201)
+async def enviar_anexos_pedido(pedido_id: int, arquivos: list[UploadFile] = File(...), banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    pedido = banco.query(PedidoCompra).filter(PedidoCompra.id == pedido_id, PedidoCompra.condominio_id == usuario.condominio_id).first()
+    if not pedido: raise HTTPException(404, "Pedido não encontrado.")
+    if not 1 <= len(arquivos) <= 5: raise HTTPException(422, "Envie de uma a cinco imagens por vez.")
+    preparados = []
+    for arquivo in arquivos:
+        conteudo = await arquivo.read(LIMITE_ANEXO_BYTES + 1); nome = _validar_imagem(arquivo.filename, arquivo.content_type, conteudo)
+        preparados.append((nome, arquivo.content_type, conteudo))
+    storage = obter_storage(banco, usuario.condominio_id); salvos = []
+    for nome, mime_type, conteudo in preparados:
+        salvo = storage.salvar(f"/CondoHub/Compras/Pedido-{pedido.id}", nome, conteudo, mime_type)
+        anexo = AnexoPedidoCompra(pedido_id=pedido.id, provedor=salvo.provedor, arquivo_externo_id=salvo.arquivo_id,
+                                  armazenamento_id=salvo.armazenamento_id, nome=salvo.nome, mime_type=mime_type,
+                                  tamanho=salvo.tamanho, autor_id=usuario.id)
+        banco.add(anexo); banco.flush(); salvos.append(anexo)
+    banco.commit()
+    return [{"id": a.id, "nome": a.nome, "url": f"/api/pedidos-compra/{pedido.id}/anexos/{a.id}/arquivo"} for a in salvos]
+
+
+@app.get("/pedidos-compra/{pedido_id}/anexos/{anexo_id}/arquivo")
+def baixar_anexo_pedido(pedido_id: int, anexo_id: int, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    pedido = banco.query(PedidoCompra).filter(PedidoCompra.id == pedido_id, PedidoCompra.condominio_id == usuario.condominio_id).first()
+    if not pedido: raise HTTPException(404, "Pedido não encontrado.")
+    anexo = banco.query(AnexoPedidoCompra).filter(AnexoPedidoCompra.id == anexo_id, AnexoPedidoCompra.pedido_id == pedido.id).first()
+    if not anexo: raise HTTPException(404, "Anexo não encontrado.")
+    arquivo = obter_storage(banco, usuario.condominio_id).baixar(anexo.armazenamento_id, anexo.arquivo_externo_id)
+    return Response(content=arquivo.content, media_type=anexo.mime_type, headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(anexo.nome)}", "Cache-Control": "private, max-age=300"})
 
 
 def _prestador_resposta(prestador: PrestadorServico, banco: Session):

@@ -155,11 +155,11 @@ Depois instale as dependências Python atualizadas de `condohub-api/requirements
 As migrações multi-tenant `006` e `007` são idempotentes e executadas na
 inicialização da API, inclusive no Render.
 
-## Integração com OneDrive para atas
+## Integração com OneDrive para documentos
 
-O módulo `/atas` cataloga PDFs e documentos Word mantidos no OneDrive pessoal
-do condomínio. Os arquivos continuam pertencendo ao cliente; o CondoHub guarda
-metadados e controla quais atas foram publicadas para os moradores.
+Os módulos `/atas`, `/balancetes` e `/orcamentos` catalogam documentos mantidos
+no OneDrive pessoal do condomínio. Os arquivos continuam pertencendo ao cliente;
+o CondoHub guarda metadados e controla quais documentos foram publicados.
 
 Para configurar:
 
@@ -173,11 +173,11 @@ Para configurar:
 4. Gere a chave de criptografia uma única vez com o comando documentado em
    `.env.example`. Trocar essa chave invalida as conexões já armazenadas.
 5. No aplicativo, um síndico ou administrador acessa `Administração > OneDrive`,
-   conecta a conta e informa a pasta existente das atas.
+   conecta a conta e informa as pastas existentes de atas, balancetes e orçamentos.
 
 A integração solicita os escopos delegados `Files.ReadWrite`, `User.Read` e
-`offline_access`. A sincronização do MVP é manual, recursiva e importa arquivos
-`.pdf`, `.doc` e `.docx` como pendentes de revisão.
+`offline_access`. A sincronização é manual e recursiva. Atas aceitam PDF e Word;
+balancetes e orçamentos também aceitam Excel. Todo documento entra pendente de revisão.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
