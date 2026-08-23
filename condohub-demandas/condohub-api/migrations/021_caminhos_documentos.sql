@@ -1,0 +1,2 @@
+ALTER TABLE atas ADD COLUMN IF NOT EXISTS caminho_relativo TEXT NOT NULL DEFAULT '';
+ALTER TABLE documentos_financeiros ADD COLUMN IF NOT EXISTS caminho_relativo TEXT NOT NULL DEFAULT '';

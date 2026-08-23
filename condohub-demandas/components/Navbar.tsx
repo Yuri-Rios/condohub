@@ -52,6 +52,13 @@ export default function Navbar() {
   const [menuAberto, setMenuAberto] = useState(false);
 
   useEffect(() => {
+    if (!menuAberto) return;
+    const anterior = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = anterior; };
+  }, [menuAberto]);
+
+  useEffect(() => {
     void fetch("/api/condominios", { cache: "no-store" })
       .then((resposta) => (resposta.ok ? resposta.json() : []))
       .then(setCondominios);
@@ -90,21 +97,21 @@ export default function Navbar() {
     };
   }, [acesso?.condominio.id]);
 
-  const itensAtendimento: ItemMenu[] = [
-    ...(podeAcessarModulo("chamados") ? [{ href: "/nova-ocorrencia", label: "Novo chamado" }, {
+  const itensPrincipais: ItemMenu[] = [
+    ...(podeAcessarModulo("chamados") ? [{
       href: "/ocorrencias",
       label: "Chamados",
       badge: atualizacoesChamados,
-    }] : []),
+    }, { href: "/nova-ocorrencia", label: "Novo chamado" }] : []),
     ...(podeAgendar && podeAcessarModulo("agendamentos")
       ? [{ href: "/agendamentos", label: "Agendamentos" }]
       : []),
+  ];
+  const itensCondominio: ItemMenu[] = [
     ...(podeAcessarModulo("atas") ? [{ href: "/atas", label: "Atas" }] : []),
     ...(podeAcessarModulo("financeiro") ? [{ href: "/balancetes", label: "Balancetes" }, { href: "/orcamentos", label: "Orçamentos" }] : []),
     ...(podeAcessarModulo("acompanhamento") ? [{ href: "/acompanhamento", label: "Acompanhamento" }] : []),
-  ];
-  const itensGestao: ItemMenu[] = podeAdministrar
-    ? [
+    ...(podeAdministrar ? [
         {
           href: "/administracao/solicitacoes",
           label: "Acessos",
@@ -118,10 +125,13 @@ export default function Navbar() {
         ...(podeAcessarModulo("patrimonio") ? [{ href: "/patrimonio", label: "Patrimônio" }] : []),
         ...(podeAcessarModulo("prestadores") ? [{ href: "/prestadores", label: "Prestadores" }] : []),
         ...(podeAcessarModulo("cronogramas") ? [{ href: "/cronogramas", label: "Cronogramas" }] : []),
-        ...(podeAcessarModulo("atas") || podeAcessarModulo("financeiro") ? [{ href: "/administracao/onedrive", label: "OneDrive" }] : []),
-        ...(podeConfigurar ? [{ href: "/configuracoes", label: "Configurações" }] : []),
-      ]
-    : [];
+      ] : []),
+  ];
+  const itensConfiguracoes: ItemMenu[] = [
+    ...(podeAdministrar && (podeAcessarModulo("atas") || podeAcessarModulo("financeiro")) ? [{ href: "/administracao/onedrive", label: "Sincronizar" }] : []),
+    ...(podeConfigurar ? [{ href: "/configuracoes", label: "Configurações do condomínio" }] : []),
+    { href: "/conta", label: "Minha conta" },
+  ];
   const itensPlataforma: ItemMenu[] = acesso?.admin_plataforma
     ? [{ href: "/administracao/condominios", label: "Condomínios" }]
     : [];
@@ -169,40 +179,36 @@ export default function Navbar() {
   }
 
   return (
-    <header className="sticky top-3 z-20 mb-10 rounded-2xl border border-white/80 bg-white/90 p-2 shadow-[0_8px_32px_rgba(15,23,42,0.08)] backdrop-blur">
-      <nav className="flex items-center gap-2">
+    <>
+    <aside id="menu-desktop" className="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-slate-200 bg-white shadow-[8px_0_30px_rgba(15,23,42,.05)] lg:flex">
+      <div className="border-b border-slate-100 p-4 pt-5"><div className="flex items-center gap-3"><UserButton appearance={{elements:{avatarBox:"h-11 w-11"}}}/><div className="min-w-0"><p className="truncate font-bold text-slate-900">{user?.fullName??"Minha conta"}</p><p className="truncate text-xs text-slate-500">{papeis.length?papeis.map(p=>nomesDosPapeis[p]??p).join(" · "):"Acesso não aprovado"}</p></div></div>{condominios.length>1?<select aria-label="Condomínio ativo" value={acesso?.condominio.slug??""} onChange={e=>void trocarCondominio(e.target.value)} className="input mt-3 py-2 text-xs font-semibold">{condominios.map(c=><option key={c.id} value={c.slug}>{c.nome}</option>)}</select>:<p className="mt-3 truncate rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">{acesso?.condominio.nome??"Condomínio"}</p>}</div>
+      <div className="flex-1 overflow-y-auto p-4"><div className="grid gap-6">{grupoMenu("Principal",itensPrincipais)}{grupoMenu("Condomínio",itensCondominio)}{grupoMenu("Configurações",itensConfiguracoes)}{grupoMenu("Plataforma",itensPlataforma)}</div></div>
+      <div className="border-t border-slate-100 p-4 text-center text-xs text-slate-400">CondoHub</div>
+    </aside>
+    <header className="sticky top-0 z-30 mb-7 -mx-4 border-b border-slate-200/80 bg-white px-4 py-2.5 shadow-sm sm:-mx-6 sm:px-6 lg:hidden">
+      <nav className="mx-auto flex max-w-7xl items-center gap-2">
+        <button
+          type="button"
+          aria-label={menuAberto ? "Fechar menu" : "Abrir menu"}
+          aria-expanded={menuAberto}
+          aria-controls="menu-principal"
+          onClick={() => setMenuAberto((aberto) => !aberto)}
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-slate-700 hover:bg-slate-100"
+        >
+          <span className="flex w-5 flex-col gap-1.5" aria-hidden="true"><span className="h-0.5 rounded-full bg-current"/><span className="h-0.5 rounded-full bg-current"/><span className="h-0.5 rounded-full bg-current"/></span>
+        </button>
         <Link
           href={podeAcessarModulo("chamados") ? "/ocorrencias" : "/conta"}
-          aria-label="CondoHub — chamados"
-          className="flex shrink-0 items-center gap-2 px-2 py-1"
+          aria-label="CondoHub"
+          className="flex min-w-0 items-center gap-2"
         >
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-blue-600 to-sky-500 text-sm font-black text-white shadow-sm">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-blue-600 to-sky-500 text-sm font-black text-white shadow-sm">
             CH
           </span>
-          <span className="hidden font-bold tracking-tight text-slate-950 lg:inline">
+          <span className="truncate font-bold tracking-tight text-slate-950">
             CondoHub
           </span>
         </Link>
-
-        {podeAcessarModulo("chamados") && <div className="hidden items-center gap-1 md:flex">
-          <Link
-            href="/nova-ocorrencia"
-            className={`whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold ${classeLink("/nova-ocorrencia")}`}
-          >
-            Novo chamado
-          </Link>
-          <Link
-            href="/ocorrencias"
-            className={`flex items-center whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold ${classeLink("/ocorrencias")}`}
-          >
-            Chamados
-            {atualizacoesChamados > 0 && (
-              <span className="ml-2 rounded-full bg-rose-500 px-2 py-0.5 text-xs text-white">
-                {atualizacoesChamados}
-              </span>
-            )}
-          </Link>
-        </div>}
 
         <div className="ml-auto flex min-w-0 items-center gap-2">
           {condominios.length > 1 ? (
@@ -224,72 +230,20 @@ export default function Navbar() {
             </span>
           ) : null}
 
-          <div className="hidden text-right xl:block">
-            <p className="max-w-40 truncate text-sm font-semibold text-slate-800">
-              {user?.fullName ?? "Minha conta"}
-            </p>
-            <p className="max-w-48 truncate text-xs text-slate-500">
-              {papeis.length > 0
-                ? papeis.map((papel) => nomesDosPapeis[papel] ?? papel).join(" · ")
-                : "Acesso não aprovado"}
-            </p>
-          </div>
-
           <UserButton
             appearance={{
               elements: { avatarBox: "h-9 w-9 ring-2 ring-slate-100" },
             }}
           />
-
-          <div className="relative">
-            <button
-              type="button"
-              aria-label={menuAberto ? "Fechar menu" : "Abrir menu"}
-              aria-expanded={menuAberto}
-              aria-controls="menu-principal"
-              onClick={() => setMenuAberto((aberto) => !aberto)}
-              className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-            >
-              <span className="flex w-5 flex-col gap-1" aria-hidden="true">
-                <span className="h-0.5 rounded-full bg-current" />
-                <span className="h-0.5 rounded-full bg-current" />
-                <span className="h-0.5 rounded-full bg-current" />
-              </span>
-            </button>
-
-            {menuAberto && (
-              <>
-                <button
-                  type="button"
-                  aria-label="Fechar menu"
-                  onClick={() => setMenuAberto(false)}
-                  className="fixed inset-0 z-10 cursor-default"
-                />
-                <div
-                  id="menu-principal"
-                  className="absolute right-0 z-20 mt-3 max-h-[calc(100vh-6rem)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_20px_60px_rgba(15,23,42,0.18)]"
-                >
-                  <div className="border-b border-slate-100 px-2 pb-4">
-                    <p className="truncate font-bold text-slate-950">
-                      {user?.fullName ?? "Minha conta"}
-                    </p>
-                    <p className="mt-0.5 truncate text-sm text-slate-500">
-                      {acesso?.condominio.nome ?? "CondoHub"}
-                    </p>
-                  </div>
-
-                  <div className="mt-4 grid gap-5 sm:grid-cols-2">
-                    {grupoMenu("Atendimento", itensAtendimento)}
-                    {grupoMenu("Gestão do condomínio", itensGestao)}
-                    {grupoMenu("Plataforma", itensPlataforma)}
-                    {grupoMenu("Perfil", [{ href: "/conta", label: "Minha conta" }])}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
         </div>
       </nav>
+      {menuAberto && <><button type="button" aria-label="Fechar menu" onClick={()=>setMenuAberto(false)} className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-[1px] lg:hidden"/><aside id="menu-principal" className="fixed inset-y-0 left-0 z-50 flex w-[min(21rem,88vw)] flex-col bg-white shadow-[20px_0_60px_rgba(15,23,42,.2)] lg:hidden">
+        <div className="flex items-center justify-between border-b border-slate-100 p-4"><p className="font-bold text-slate-950">Menu</p><button type="button" aria-label="Fechar menu" onClick={()=>setMenuAberto(false)} className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-xl text-slate-700">×</button></div>
+        <div className="border-b border-slate-100 p-4"><div className="flex items-center gap-3"><UserButton appearance={{elements:{avatarBox:"h-11 w-11"}}}/><div className="min-w-0"><p className="truncate font-bold text-slate-900">{user?.fullName??"Minha conta"}</p><p className="truncate text-xs text-slate-500">{papeis.length?papeis.map(p=>nomesDosPapeis[p]??p).join(" · "):"Acesso não aprovado"}</p></div></div><p className="mt-3 truncate rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">{acesso?.condominio.nome??"CondoHub"}</p></div>
+        <div className="flex-1 overflow-y-auto p-4"><div className="grid gap-6">{grupoMenu("Principal",itensPrincipais)}{grupoMenu("Condomínio",itensCondominio)}{grupoMenu("Configurações",itensConfiguracoes)}{grupoMenu("Plataforma",itensPlataforma)}</div></div>
+        <div className="border-t border-slate-100 p-4 text-center text-xs text-slate-400">CondoHub</div>
+      </aside></>}
     </header>
+    </>
   );
 }

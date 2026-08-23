@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Navbar from "@/components/Navbar";
 import Titulo from "@/components/Titulo";
+import ArvoreArquivos from "@/components/ArvoreArquivos";
 
 type Ata = {
   id: number;
@@ -11,6 +12,7 @@ type Ata = {
   data_assembleia: string | null;
   descricao: string | null;
   nome_arquivo: string;
+  caminho_relativo: string;
   mime_type: string | null;
   tamanho: number | null;
   modificado_em: string | null;
@@ -89,26 +91,24 @@ export default function AtasPage() {
         {carregando ? <p className="mt-8 text-slate-500">Carregando atas…</p> : atas.length === 0 ? (
           <div className="mt-8 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">Nenhuma ata publicada ou importada.</div>
         ) : (
-          <div className="mt-8 grid gap-4">
-            {atas.map((ata) => (
-              <article key={ata.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-                  <div>
+          <div className="mt-8">
+            <ArvoreArquivos arquivos={atas} renderArquivo={(ata) => (
+                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${ata.publicada ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{ata.publicada ? "Publicada" : "Pendente de revisão"}</span>
                       <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{ata.tipo.replaceAll("_", " ")}</span>
                     </div>
-                    <h2 className="mt-3 text-lg font-bold text-slate-950">{ata.titulo}</h2>
+                    <h2 className="mt-1.5 truncate font-bold text-slate-950">{ata.titulo}</h2>
                     <p className="mt-1 text-sm text-slate-500">{ata.data_assembleia ? new Date(ata.data_assembleia).toLocaleDateString("pt-BR") : "Data da assembleia não informada"} · {ata.nome_arquivo} {tamanhoLegivel(ata.tamanho) && `· ${tamanhoLegivel(ata.tamanho)}`}</p>
                     {ata.descricao && <p className="mt-3 text-sm text-slate-600">{ata.descricao}</p>}
                   </div>
                   <div className="flex shrink-0 gap-2">
-                    <a href={`/api/atas/${ata.id}/arquivo`} target="_blank" rel="noreferrer" className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white">Abrir</a>
-                    {ata.pode_gerenciar && <button onClick={() => setEditando(ata)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700">Revisar</button>}
+                    <a href={`/api/atas/${ata.id}/arquivo`} target="_blank" rel="noreferrer" className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">Abrir</a>
+                    {ata.pode_gerenciar && <button onClick={() => setEditando(ata)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700">Revisar</button>}
                   </div>
                 </div>
-              </article>
-            ))}
+            )}/>
           </div>
         )}
 

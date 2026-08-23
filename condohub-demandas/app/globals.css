@@ -44,3 +44,10 @@ textarea {
   background: #bfdbfe;
   color: #172554;
 }
+
+@media (min-width: 64rem) {
+  body:has(#menu-desktop) > main,
+  body:has(#menu-desktop) > footer {
+    margin-left: 18rem;
+  }
+}

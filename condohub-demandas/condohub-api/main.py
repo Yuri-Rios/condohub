@@ -277,6 +277,7 @@ def _ata_resposta(ata: Ata, pode_gerenciar: bool):
         "data_assembleia": ata.data_assembleia,
         "descricao": ata.descricao,
         "nome_arquivo": ata.nome_arquivo,
+        "caminho_relativo": ata.caminho_relativo,
         "mime_type": ata.mime_type,
         "tamanho": ata.tamanho,
         "modificado_em": ata.modificado_em,
@@ -414,6 +415,7 @@ def sincronizar_atas(banco: Session = Depends(pegar_banco), usuario: ContextoCon
             modificado = datetime.fromisoformat(arquivo["lastModifiedDateTime"].replace("Z", "+00:00")) if arquivo.get("lastModifiedDateTime") else None
             if ata:
                 ata.nome_arquivo = nome
+                ata.caminho_relativo = arquivo.get("_caminho_relativo", "")
                 ata.mime_type = arquivo.get("file", {}).get("mimeType")
                 ata.tamanho = arquivo.get("size")
                 ata.etag = arquivo.get("eTag")
@@ -429,6 +431,7 @@ def sincronizar_atas(banco: Session = Depends(pegar_banco), usuario: ContextoCon
                     drive_id=integracao.drive_id,
                     drive_item_id=arquivo["id"],
                     nome_arquivo=nome,
+                    caminho_relativo=arquivo.get("_caminho_relativo", ""),
                     mime_type=arquivo.get("file", {}).get("mimeType"),
                     tamanho=arquivo.get("size"),
                     etag=arquivo.get("eTag"),
@@ -499,7 +502,7 @@ def obter_arquivo_ata(ata_id: int, banco: Session = Depends(pegar_banco), usuari
 def _documento_financeiro_resposta(documento: DocumentoFinanceiro, pode_gerenciar: bool):
     return {"id": documento.id, "tipo": documento.tipo, "titulo": documento.titulo,
             "competencia": documento.competencia, "descricao": documento.descricao,
-            "nome_arquivo": documento.nome_arquivo, "mime_type": documento.mime_type,
+            "nome_arquivo": documento.nome_arquivo, "caminho_relativo": documento.caminho_relativo, "mime_type": documento.mime_type,
             "tamanho": documento.tamanho, "modificado_em": documento.modificado_em,
             "publicado": documento.publicado, "pode_gerenciar": pode_gerenciar}
 
@@ -537,13 +540,14 @@ def sincronizar_documentos_financeiros(tipo: str, banco: Session = Depends(pegar
                 DocumentoFinanceiro.drive_id == integracao.drive_id, DocumentoFinanceiro.drive_item_id == arquivo["id"]).first()
             modificado = datetime.fromisoformat(arquivo["lastModifiedDateTime"].replace("Z", "+00:00")) if arquivo.get("lastModifiedDateTime") else None
             if documento:
-                documento.nome_arquivo = nome; documento.mime_type = arquivo.get("file", {}).get("mimeType")
+                documento.nome_arquivo = nome; documento.caminho_relativo = arquivo.get("_caminho_relativo", ""); documento.mime_type = arquivo.get("file", {}).get("mimeType")
                 documento.tamanho = arquivo.get("size"); documento.etag = arquivo.get("eTag"); documento.modificado_em = modificado
                 atualizados += 1
             else:
                 titulo, competencia = _metadados_documento_financeiro(nome)
                 banco.add(DocumentoFinanceiro(condominio_id=usuario.condominio_id, tipo=tipo, titulo=titulo,
                     competencia=competencia, drive_id=integracao.drive_id, drive_item_id=arquivo["id"], nome_arquivo=nome,
+                    caminho_relativo=arquivo.get("_caminho_relativo", ""),
                     mime_type=arquivo.get("file", {}).get("mimeType"), tamanho=arquivo.get("size"),
                     etag=arquivo.get("eTag"), modificado_em=modificado, publicado=False))
                 importados += 1

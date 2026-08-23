@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
@@ -450,6 +451,19 @@ class DocumentoFinanceiroAtualizar(BaseModel):
     competencia: date | None = None
     descricao: str | None = Field(default=None, max_length=4000)
     publicado: bool
+
+    @field_validator("competencia", mode="before")
+    @classmethod
+    def normalizar_competencia(cls, valor):
+        if not valor or not isinstance(valor, str):
+            return valor
+        correspondencia = re.fullmatch(r"(\d{2})/(\d{4})", valor.strip())
+        if correspondencia:
+            return f"{correspondencia[2]}-{correspondencia[1]}-01"
+        correspondencia = re.fullmatch(r"(\d{4})-(\d{2})", valor.strip())
+        if correspondencia:
+            return f"{correspondencia[1]}-{correspondencia[2]}-01"
+        return valor
 
     @field_validator("titulo")
     @classmethod

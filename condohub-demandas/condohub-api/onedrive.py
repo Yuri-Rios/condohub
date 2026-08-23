@@ -149,16 +149,18 @@ def resolver_pasta(token: str, caminho: str) -> dict:
 
 def listar_arquivos(token: str, drive_id: str, pasta_id: str) -> list[dict]:
     itens: list[dict] = []
-    pastas = [pasta_id]
+    pastas = [(pasta_id, "")]
     while pastas:
-        atual = pastas.pop()
+        atual, caminho_relativo = pastas.pop()
         caminho = f"/drives/{quote(drive_id, safe='')}/items/{quote(atual, safe='')}/children?$select=id,name,size,file,folder,eTag,lastModifiedDateTime,parentReference&$top=200"
         while caminho:
             dados = graph_get(token, caminho).json()
             for item in dados.get("value", []):
                 if item.get("folder") is not None:
-                    pastas.append(item["id"])
+                    proximo_caminho = "/".join(parte for parte in [caminho_relativo, item.get("name", "")] if parte)
+                    pastas.append((item["id"], proximo_caminho))
                 else:
+                    item["_caminho_relativo"] = caminho_relativo
                     itens.append(item)
                 if len(itens) + len(pastas) > 5000:
                     raise HTTPException(status_code=413, detail="A pasta possui itens demais para a importação do MVP.")

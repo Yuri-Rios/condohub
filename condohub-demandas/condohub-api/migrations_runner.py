@@ -19,6 +19,7 @@ MIGRACOES_MULTITENANT = (
     "018_data_compra_pedidos.sql",
     "019_fotos_compras_patrimonios.sql",
     "020_documentos_financeiros.sql",
+    "021_caminhos_documentos.sql",
 )
 
 

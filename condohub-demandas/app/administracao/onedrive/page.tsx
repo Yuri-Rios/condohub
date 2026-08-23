@@ -15,6 +15,7 @@ type Integracao = {
   pastas?: { atas?: string | null; balancete?: string | null; orcamento?: string | null };
 };
 type TipoDocumento = "atas" | "balancete" | "orcamento";
+function mensagemErro(dados:unknown,padrao:string){if(!dados||typeof dados!=="object")return padrao;const detalhe=(dados as {detail?:unknown}).detail;if(typeof detalhe==="string")return detalhe;if(Array.isArray(detalhe)){const mensagens=detalhe.map(item=>item&&typeof item==="object"&&typeof (item as {msg?:unknown}).msg==="string"?(item as {msg:string}).msg.replace(/^Value error,\s*/,""):null).filter(Boolean);if(mensagens.length)return mensagens.join(" ")}return padrao}
 
 export default function OneDrivePage() {
   const acesso = useAcesso();
@@ -32,7 +33,7 @@ export default function OneDrivePage() {
     const resposta = await fetch("/api/integracoes/onedrive", { cache: "no-store" });
     const dados = await resposta.json();
     if (!resposta.ok) {
-      setErro(dados.detail ?? "Não foi possível consultar a integração.");
+      setErro(mensagemErro(dados,"Não foi possível consultar a integração."));
       return;
     }
     setIntegracao(dados);
@@ -45,7 +46,7 @@ export default function OneDrivePage() {
     void fetch("/api/integracoes/onedrive", { cache: "no-store" })
       .then(async (resposta) => ({ resposta, dados: await resposta.json() }))
       .then(({ resposta, dados }) => {
-        if (!resposta.ok) setErro(dados.detail ?? "Não foi possível consultar a integração.");
+        if (!resposta.ok) setErro(mensagemErro(dados,"Não foi possível consultar a integração."));
         else {
           setIntegracao(dados);
           if (dados.pasta) setPasta(dados.pasta);
@@ -64,7 +65,7 @@ export default function OneDrivePage() {
     const resposta = await fetch("/api/integracoes/onedrive/conectar", { method: "POST" });
     const dados = await resposta.json();
     if (!resposta.ok) {
-      setErro(dados.detail ?? "Não foi possível iniciar a conexão.");
+      setErro(mensagemErro(dados,"Não foi possível iniciar a conexão."));
       setOcupado(false);
       return;
     }
@@ -83,7 +84,7 @@ export default function OneDrivePage() {
     const dados = await resposta.json();
     setOcupado(false);
     if (!resposta.ok) {
-      setErro(dados.detail ?? "Pasta não encontrada no OneDrive.");
+      setErro(mensagemErro(dados,"Pasta não encontrada no OneDrive."));
       return;
     }
     setIntegracao(dados);
@@ -94,7 +95,7 @@ export default function OneDrivePage() {
     setOcupado(true); setErro(""); setMensagem("");
     const resposta = await fetch(`/api/integracoes/onedrive/pastas/${tipo}`, { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({caminho}) });
     const dados = await resposta.json(); setOcupado(false);
-    if (!resposta.ok) { setErro(dados.detail ?? "Pasta não encontrada no OneDrive."); return; }
+    if (!resposta.ok) { setErro(mensagemErro(dados,"Pasta não encontrada no OneDrive.")); return; }
     setIntegracao(dados); setMensagem(`Pasta de ${tipo === "balancete" ? "balancetes" : "orçamentos"} configurada.`);
   }
 
@@ -110,7 +111,7 @@ export default function OneDrivePage() {
       const url = tipo === "atas" ? "/api/atas/sincronizar" : `/api/documentos-financeiros/${tipo}/sincronizar`;
       const resposta = await fetch(url,{method:"POST"}); const dados=await resposta.json().catch(()=>null);
       if (resposta.ok) resultados.push(`${rotulos[tipo]}: ${dados.importados} novo(s), ${dados.atualizados} atualizado(s)`);
-      else falhas.push(`${rotulos[tipo]}: ${dados?.detail ?? "falha na sincronização"}`);
+      else falhas.push(`${rotulos[tipo]}: ${mensagemErro(dados,"falha na sincronização")}`);
     }
     setOcupado(false); if(resultados.length)setMensagem(resultados.join(" · ")); if(falhas.length)setErro(falhas.join(" · ")); await carregar();
   }
@@ -120,7 +121,7 @@ export default function OneDrivePage() {
     const resposta = await fetch("/api/integracoes/onedrive", { method: "DELETE" });
     if (!resposta.ok) {
       const dados = await resposta.json();
-      setErro(dados.detail ?? "Não foi possível desconectar.");
+      setErro(mensagemErro(dados,"Não foi possível desconectar."));
       return;
     }
     setIntegracao({ conectada: false });
@@ -131,12 +132,13 @@ export default function OneDrivePage() {
     <main className="min-h-screen px-4 py-3 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
         <Navbar />
-        <Titulo texto="Documentos no OneDrive" subtitulo="Integre atas, balancetes e orçamentos sem transferir a propriedade dos arquivos para o CondoHub." />
+        <Titulo texto="Sincronizar" subtitulo="Conecte serviços externos para manter documentos e informações do condomínio atualizados." />
 
         {erro && <p className="mt-6 rounded-xl bg-rose-50 p-4 text-rose-700">{erro}</p>}
         {mensagem && <p className="mt-6 rounded-xl bg-emerald-50 p-4 text-emerald-700">{mensagem}</p>}
 
         <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-6 flex items-center gap-4 border-b border-slate-100 pb-5"><span className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-sm font-black text-blue-700">OD</span><div><p className="text-xs font-bold uppercase tracking-wider text-slate-400">Provedor disponível</p><h2 className="mt-1 font-bold text-slate-950">Microsoft OneDrive</h2><p className="mt-0.5 text-sm text-slate-500">Atas, balancetes, orçamentos e anexos.</p></div></div>
           {!integracao ? (
             <p className="text-slate-500">Carregando integração…</p>
           ) : !integracao.conectada ? (
