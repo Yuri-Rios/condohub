@@ -109,7 +109,7 @@ export default function Navbar() {
   ];
   const itensCondominio: ItemMenu[] = [
     ...(podeAcessarModulo("atas") ? [{ href: "/atas", label: "Atas" }] : []),
-    ...(podeAcessarModulo("financeiro") ? [{ href: "/balancetes", label: "Balancetes" }, { href: "/orcamentos", label: "Orçamentos" }] : []),
+    ...(podeAcessarModulo("financeiro") ? [{ href: "/balancetes", label: "Balancetes" }, { href: "/orcamentos", label: "Orçamentos" }, { href: "/contratos", label: "Contratos" }, { href: "/certificados", label: "Certificados" }, { href: "/memorial", label: "Memorial" }] : []),
     ...(podeAcessarModulo("acompanhamento") ? [{ href: "/acompanhamento", label: "Acompanhamento" }] : []),
     ...(podeAdministrar ? [
         {
