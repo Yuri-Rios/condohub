@@ -147,6 +147,21 @@ def resolver_pasta(token: str, caminho: str) -> dict:
     return graph_get(token, f"/me/drive/root:/{caminho_codificado}?$select=id,name,parentReference").json()
 
 
+def listar_pastas(token: str, drive_id: str, pasta_id: str) -> list[dict]:
+    caminho = f"/drives/{quote(drive_id, safe='')}/items/{quote(pasta_id, safe='')}/children?$select=id,name,folder&$top=200"
+    pastas: list[dict] = []
+    while caminho:
+        dados = graph_get(token, caminho).json()
+        pastas.extend(
+            {"id": item["id"], "nome": item.get("name", "")}
+            for item in dados.get("value", [])
+            if item.get("folder") is not None
+        )
+        proxima = dados.get("@odata.nextLink")
+        caminho = proxima.removeprefix(GRAPH_URL) if proxima else ""
+    return sorted(pastas, key=lambda pasta: pasta["nome"].casefold())
+
+
 def listar_arquivos(token: str, drive_id: str, pasta_id: str) -> list[dict]:
     itens: list[dict] = []
     pastas = [(pasta_id, "")]

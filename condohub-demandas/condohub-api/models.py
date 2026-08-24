@@ -447,6 +447,12 @@ class IntegracaoOneDrive(Base):
     balancetes_root_path = Column(Text, nullable=True)
     orcamentos_root_item_id = Column(String(255), nullable=True)
     orcamentos_root_path = Column(Text, nullable=True)
+    contratos_root_item_id = Column(String(255), nullable=True)
+    contratos_root_path = Column(Text, nullable=True)
+    certificados_root_item_id = Column(String(255), nullable=True)
+    certificados_root_path = Column(Text, nullable=True)
+    memoriais_root_item_id = Column(String(255), nullable=True)
+    memoriais_root_path = Column(Text, nullable=True)
 
 
 class Ata(Base):

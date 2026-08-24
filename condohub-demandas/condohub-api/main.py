@@ -100,6 +100,7 @@ from onedrive import (
     criptografar_token,
     ler_estado,
     listar_arquivos,
+    listar_pastas,
     obter_perfil_drive,
     renovar_token,
     resolver_pasta,
@@ -263,6 +264,9 @@ def _integracao_resposta(integracao: IntegracaoOneDrive | None):
             "atas": integracao.root_path,
             "balancete": integracao.balancetes_root_path,
             "orcamento": integracao.orcamentos_root_path,
+            "contrato": integracao.contratos_root_path,
+            "certificado": integracao.certificados_root_path,
+            "memorial": integracao.memoriais_root_path,
         },
         "ultima_sincronizacao_em": integracao.ultima_sincronizacao_em,
         "erro_ultima_sincronizacao": integracao.erro_ultima_sincronizacao,
@@ -377,19 +381,38 @@ def configurar_pasta_onedrive(dados: PastaOneDriveConfigurar, banco: Session = D
 
 @app.put("/integracoes/onedrive/pastas/{tipo}")
 def configurar_pasta_documento(tipo: str, dados: PastaOneDriveConfigurar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_aprovador)):
-    if tipo not in {"balancete", "orcamento"}:
+    if tipo not in {"balancete", "orcamento", "contrato", "certificado", "memorial"}:
         raise HTTPException(404, detail="Tipo de documento inválido.")
     integracao = _integracao_onedrive(banco, usuario.condominio_id)
     pasta = resolver_pasta(renovar_token(integracao), dados.caminho)
     if tipo == "balancete":
         integracao.balancetes_root_item_id = pasta["id"]
         integracao.balancetes_root_path = dados.caminho
-    else:
+    elif tipo == "orcamento":
         integracao.orcamentos_root_item_id = pasta["id"]
         integracao.orcamentos_root_path = dados.caminho
+    elif tipo == "contrato":
+        integracao.contratos_root_item_id = pasta["id"]
+        integracao.contratos_root_path = dados.caminho
+    elif tipo == "certificado":
+        integracao.certificados_root_item_id = pasta["id"]
+        integracao.certificados_root_path = dados.caminho
+    else:
+        integracao.memoriais_root_item_id = pasta["id"]
+        integracao.memoriais_root_path = dados.caminho
     integracao.status = "ativa"; integracao.erro_ultima_sincronizacao = None
     banco.commit()
     return _integracao_resposta(integracao)
+
+
+@app.get("/integracoes/onedrive/pastas")
+def navegar_pastas_onedrive(caminho: str = "/", banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    integracao = _integracao_onedrive(banco, usuario.condominio_id)
+    token = renovar_token(integracao)
+    pasta = resolver_pasta(token, caminho)
+    resultado = listar_pastas(token, integracao.drive_id, pasta["id"])
+    banco.commit()
+    return {"caminho": caminho, "pastas": resultado}
 
 
 @app.delete("/integracoes/onedrive", status_code=204)
@@ -525,10 +548,14 @@ def _metadados_documento_financeiro(nome_arquivo: str):
 
 @app.post("/documentos-financeiros/{tipo}/sincronizar")
 def sincronizar_documentos_financeiros(tipo: str, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
-    if tipo not in {"balancete", "orcamento"}: raise HTTPException(404, "Tipo de documento inválido.")
+    rotulos = {"balancete": "balancetes", "orcamento": "orçamentos", "contrato": "contratos", "certificado": "certificados", "memorial": "memoriais"}
+    if tipo not in rotulos: raise HTTPException(404, "Tipo de documento inválido.")
     integracao = _integracao_onedrive(banco, usuario.condominio_id)
-    pasta_id = integracao.balancetes_root_item_id if tipo == "balancete" else integracao.orcamentos_root_item_id
-    if not pasta_id: raise HTTPException(422, f"Configure a pasta de {'balancetes' if tipo == 'balancete' else 'orçamentos'}.")
+    pastas = {"balancete": integracao.balancetes_root_item_id, "orcamento": integracao.orcamentos_root_item_id,
+              "contrato": integracao.contratos_root_item_id, "certificado": integracao.certificados_root_item_id,
+              "memorial": integracao.memoriais_root_item_id}
+    pasta_id = pastas[tipo]
+    if not pasta_id: raise HTTPException(422, f"Configure a pasta de {rotulos[tipo]}.")
     try:
         arquivos = listar_arquivos(renovar_token(integracao), integracao.drive_id, pasta_id)
         importados = atualizados = 0; extensoes = {".pdf", ".doc", ".docx", ".xls", ".xlsx"}
@@ -562,7 +589,7 @@ def sincronizar_documentos_financeiros(tipo: str, banco: Session = Depends(pegar
 
 @app.get("/documentos-financeiros")
 def listar_documentos_financeiros(tipo: str, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
-    if tipo not in {"balancete", "orcamento"}: raise HTTPException(422, "Tipo de documento inválido.")
+    if tipo not in {"balancete", "orcamento", "contrato", "certificado", "memorial"}: raise HTTPException(422, "Tipo de documento inválido.")
     pode_gerenciar = not usuario.papeis.isdisjoint({"sindico", "subsindico", "funcionario", "admin"})
     consulta = banco.query(DocumentoFinanceiro).filter(DocumentoFinanceiro.condominio_id == usuario.condominio_id, DocumentoFinanceiro.tipo == tipo)
     if not pode_gerenciar: consulta = consulta.filter(DocumentoFinanceiro.publicado.is_(True))
