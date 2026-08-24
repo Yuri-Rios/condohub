@@ -21,6 +21,7 @@ MIGRACOES_MULTITENANT = (
     "020_documentos_financeiros.sql",
     "021_caminhos_documentos.sql",
     "022_novas_pastas_onedrive.sql",
+    "023_modulos_documentos.sql",
 )
 
 

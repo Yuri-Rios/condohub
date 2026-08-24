@@ -26,11 +26,11 @@ CONDOMINIO_PADRAO_SLUG = "camila-barbosa"
 
 MODULOS_POR_PREFIXO = {
     "/ocorrencias": "chamados", "/mensagens": "chamados", "/notificacoes": "chamados",
-    "/reservas": "agendamentos", "/atas": "atas", "/documentos-financeiros": "financeiro", "/acompanhamento": "acompanhamento",
+    "/reservas": "agendamentos", "/atas": "atas", "/acompanhamento": "acompanhamento",
     "/pedidos-compra": "compras", "/estoque": "estoque", "/prestadores": "prestadores",
     "/cronogramas": "cronogramas", "/patrimonios": "patrimonio",
 }
-MODULOS_VISIVEIS_A_MORADORES = {"chamados", "agendamentos", "atas", "financeiro", "acompanhamento"}
+MODULOS_VISIVEIS_A_MORADORES = {"chamados", "agendamentos", "atas", "financeiro", "contratos", "certificados", "memorial", "acompanhamento"}
 
 
 @dataclass(frozen=True)

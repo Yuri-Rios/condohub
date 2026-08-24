@@ -127,6 +127,9 @@ CATALOGO_MODULOS = (
     ("agendamentos", "Agendamentos", True),
     ("atas", "Atas", True),
     ("financeiro", "Balancetes e orçamentos", True),
+    ("contratos", "Contratos", True),
+    ("certificados", "Certificados", True),
+    ("memorial", "Memorial", True),
     ("acompanhamento", "Acompanhamento", True),
     ("compras", "Compras", False),
     ("estoque", "Estoque", False),
@@ -530,6 +533,18 @@ def _documento_financeiro_resposta(documento: DocumentoFinanceiro, pode_gerencia
             "publicado": documento.publicado, "pode_gerenciar": pode_gerenciar}
 
 
+def _exigir_modulo_documento(tipo: str, banco: Session, usuario: ContextoCondominio):
+    chave = {"balancete": "financeiro", "orcamento": "financeiro", "contrato": "contratos",
+             "certificado": "certificados", "memorial": "memorial"}[tipo]
+    modulo = banco.query(ModuloCondominio).filter(
+        ModuloCondominio.condominio_id == usuario.condominio_id, ModuloCondominio.chave == chave).first()
+    if not modulo or not modulo.habilitado:
+        raise HTTPException(403, "Este módulo não está disponível para o condomínio.")
+    pode_gerenciar = not usuario.papeis.isdisjoint({"sindico", "subsindico", "funcionario", "admin"})
+    if not pode_gerenciar and not modulo.visivel_moradores:
+        raise HTTPException(403, "Este módulo não está visível para os moradores.")
+
+
 def _metadados_documento_financeiro(nome_arquivo: str):
     base = nome_arquivo.rsplit(".", 1)[0]
     titulo = re.sub(r"[_-]+", " ", base).strip()
@@ -590,6 +605,7 @@ def sincronizar_documentos_financeiros(tipo: str, banco: Session = Depends(pegar
 @app.get("/documentos-financeiros")
 def listar_documentos_financeiros(tipo: str, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
     if tipo not in {"balancete", "orcamento", "contrato", "certificado", "memorial"}: raise HTTPException(422, "Tipo de documento inválido.")
+    _exigir_modulo_documento(tipo, banco, usuario)
     pode_gerenciar = not usuario.papeis.isdisjoint({"sindico", "subsindico", "funcionario", "admin"})
     consulta = banco.query(DocumentoFinanceiro).filter(DocumentoFinanceiro.condominio_id == usuario.condominio_id, DocumentoFinanceiro.tipo == tipo)
     if not pode_gerenciar: consulta = consulta.filter(DocumentoFinanceiro.publicado.is_(True))
@@ -612,6 +628,7 @@ def atualizar_documento_financeiro(documento_id: int, dados: DocumentoFinanceiro
 @app.get("/documentos-financeiros/{documento_id}/arquivo")
 def obter_arquivo_documento_financeiro(documento_id: int, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
     documento = banco.query(DocumentoFinanceiro).filter(DocumentoFinanceiro.id == documento_id, DocumentoFinanceiro.condominio_id == usuario.condominio_id).first()
+    if documento: _exigir_modulo_documento(documento.tipo, banco, usuario)
     pode_gerenciar = not usuario.papeis.isdisjoint({"sindico", "subsindico", "funcionario", "admin"})
     if not documento or (not documento.publicado and not pode_gerenciar): raise HTTPException(404, "Documento não encontrado.")
     integracao = _integracao_onedrive(banco, usuario.condominio_id)

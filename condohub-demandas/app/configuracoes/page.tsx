@@ -19,6 +19,9 @@ const descricoes: Record<string, string> = {
   atas: "Disponibilizar as atas publicadas pela gestão.",
   acompanhamento: "Mostrar o andamento dos cronogramas publicados.",
   financeiro: "Disponibilizar balancetes e orçamentos publicados pela gestão.",
+  contratos: "Disponibilizar os contratos publicados pela gestão.",
+  certificados: "Disponibilizar certificados, licenças e documentos de conformidade.",
+  memorial: "Disponibilizar memoriais e documentos técnicos do condomínio.",
 };
 
 export default function ConfiguracoesPage() {

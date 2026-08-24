@@ -109,7 +109,10 @@ export default function Navbar() {
   ];
   const itensCondominio: ItemMenu[] = [
     ...(podeAcessarModulo("atas") ? [{ href: "/atas", label: "Atas" }] : []),
-    ...(podeAcessarModulo("financeiro") ? [{ href: "/balancetes", label: "Balancetes" }, { href: "/orcamentos", label: "Orçamentos" }, { href: "/contratos", label: "Contratos" }, { href: "/certificados", label: "Certificados" }, { href: "/memorial", label: "Memorial" }] : []),
+    ...(podeAcessarModulo("financeiro") ? [{ href: "/balancetes", label: "Balancetes" }, { href: "/orcamentos", label: "Orçamentos" }] : []),
+    ...(podeAcessarModulo("contratos") ? [{ href: "/contratos", label: "Contratos" }] : []),
+    ...(podeAcessarModulo("certificados") ? [{ href: "/certificados", label: "Certificados" }] : []),
+    ...(podeAcessarModulo("memorial") ? [{ href: "/memorial", label: "Memorial" }] : []),
     ...(podeAcessarModulo("acompanhamento") ? [{ href: "/acompanhamento", label: "Acompanhamento" }] : []),
     ...(podeAdministrar ? [
         {
@@ -128,7 +131,7 @@ export default function Navbar() {
       ] : []),
   ];
   const itensConfiguracoes: ItemMenu[] = [
-    ...(podeAdministrar && (podeAcessarModulo("atas") || podeAcessarModulo("financeiro")) ? [{ href: "/administracao/onedrive", label: "Sincronizar" }] : []),
+    ...(podeAdministrar && ["atas","financeiro","contratos","certificados","memorial"].some(podeAcessarModulo) ? [{ href: "/administracao/onedrive", label: "Sincronizar" }] : []),
     ...(podeConfigurar ? [{ href: "/configuracoes", label: "Configurações do condomínio" }] : []),
     { href: "/conta", label: "Minha conta" },
   ];
