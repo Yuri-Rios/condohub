@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from enum import Enum
 
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -93,17 +93,21 @@ from schemas import (
     SolicitacaoRecusar,
     AtaAtualizar,
     PastaOneDriveConfigurar,
+    PastaDocumentoCriar,
 )
 from onedrive import (
     baixar_arquivo,
     criar_estado,
+    criar_caminho_pastas,
     criptografar_token,
     ler_estado,
     listar_arquivos,
     listar_pastas,
+    listar_conteudo,
     obter_perfil_drive,
     renovar_token,
     resolver_pasta,
+    enviar_arquivo,
     trocar_codigo,
     url_autorizacao,
 )
@@ -276,6 +280,17 @@ def _integracao_resposta(integracao: IntegracaoOneDrive | None):
     }
 
 
+def _raiz_documento(integracao: IntegracaoOneDrive, tipo: str) -> tuple[str | None, str | None]:
+    return {
+        "atas": (integracao.root_item_id, integracao.root_path),
+        "balancete": (integracao.balancetes_root_item_id, integracao.balancetes_root_path),
+        "orcamento": (integracao.orcamentos_root_item_id, integracao.orcamentos_root_path),
+        "contrato": (integracao.contratos_root_item_id, integracao.contratos_root_path),
+        "certificado": (integracao.certificados_root_item_id, integracao.certificados_root_path),
+        "memorial": (integracao.memoriais_root_item_id, integracao.memoriais_root_path),
+    }.get(tipo, (None, None))
+
+
 def _ata_resposta(ata: Ata, pode_gerenciar: bool):
     return {
         "id": ata.id,
@@ -416,6 +431,61 @@ def navegar_pastas_onedrive(caminho: str = "/", banco: Session = Depends(pegar_b
     resultado = listar_pastas(token, integracao.drive_id, pasta["id"])
     banco.commit()
     return {"caminho": caminho, "pastas": resultado}
+
+
+@app.get("/documentos/{tipo}/estrutura")
+def estrutura_documentos(tipo: str, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
+    integracao = _integracao_onedrive(banco, usuario.condominio_id)
+    pasta_id, _ = _raiz_documento(integracao, tipo)
+    if not pasta_id:
+        raise HTTPException(422, "Pasta não configurada.")
+    _, pastas = listar_conteudo(renovar_token(integracao), integracao.drive_id, pasta_id)
+    banco.commit()
+    return {"pastas": pastas}
+
+
+@app.post("/documentos/pastas", status_code=201)
+def criar_pasta_documento(dados: PastaDocumentoCriar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_aprovador)):
+    integracao = _integracao_onedrive(banco, usuario.condominio_id)
+    _, raiz = _raiz_documento(integracao, dados.tipo)
+    if not raiz:
+        raise HTTPException(422, "Pasta não configurada.")
+    relativo = "/".join(parte for parte in [dados.caminho_pai, dados.nome] if parte)
+    caminho = "/".join(parte.strip("/") for parte in [raiz, relativo] if parte.strip("/"))
+    pasta = criar_caminho_pastas(renovar_token(integracao), integracao.drive_id, "/" + caminho)
+    banco.commit()
+    return {"id": pasta["id"], "caminho": relativo}
+
+
+@app.post("/documentos/{tipo}/arquivo", status_code=201)
+async def enviar_arquivo_documento(tipo: str, caminho: str = Form(default=""), arquivo: UploadFile = File(...), banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_aprovador)):
+    integracao = _integracao_onedrive(banco, usuario.condominio_id)
+    _, raiz = _raiz_documento(integracao, tipo)
+    if not raiz or tipo not in {"atas", "balancete", "orcamento", "contrato", "certificado", "memorial"}:
+        raise HTTPException(422, "Pasta ou tipo de documento inválido.")
+    relativo = caminho.strip().strip("/")
+    if ".." in relativo.split("/"):
+        raise HTTPException(422, "Caminho inválido.")
+    conteudo = await arquivo.read()
+    if len(conteudo) > 25 * 1024 * 1024:
+        raise HTTPException(413, "O arquivo deve ter no máximo 25 MB.")
+    caminho_destino = "/".join(parte.strip("/") for parte in [raiz, relativo] if parte.strip("/"))
+    token = renovar_token(integracao)
+    pasta = criar_caminho_pastas(token, integracao.drive_id, "/" + caminho_destino)
+    item = enviar_arquivo(token, integracao.drive_id, pasta["id"], arquivo.filename or "arquivo", conteudo, arquivo.content_type or "application/octet-stream")
+    modificado = datetime.fromisoformat(item["lastModifiedDateTime"].replace("Z", "+00:00")) if item.get("lastModifiedDateTime") else None
+    if tipo == "atas":
+        titulo, subtipo, data_assembleia = _metadados_iniciais_ata(arquivo.filename or "arquivo")
+        banco.add(Ata(condominio_id=usuario.condominio_id, titulo=titulo, tipo=subtipo, data_assembleia=data_assembleia,
+            drive_id=integracao.drive_id, drive_item_id=item["id"], nome_arquivo=arquivo.filename or "arquivo", caminho_relativo=relativo,
+            mime_type=arquivo.content_type, tamanho=len(conteudo), etag=item.get("eTag"), modificado_em=modificado, publicada=False))
+    else:
+        titulo, competencia = _metadados_documento_financeiro(arquivo.filename or "arquivo")
+        banco.add(DocumentoFinanceiro(condominio_id=usuario.condominio_id, tipo=tipo, titulo=titulo, competencia=competencia,
+            drive_id=integracao.drive_id, drive_item_id=item["id"], nome_arquivo=arquivo.filename or "arquivo", caminho_relativo=relativo,
+            mime_type=arquivo.content_type, tamanho=len(conteudo), etag=item.get("eTag"), modificado_em=modificado, publicado=False))
+    banco.commit()
+    return {"id": item["id"], "nome": arquivo.filename, "caminho": relativo}
 
 
 @app.delete("/integracoes/onedrive", status_code=204)

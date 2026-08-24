@@ -162,8 +162,9 @@ def listar_pastas(token: str, drive_id: str, pasta_id: str) -> list[dict]:
     return sorted(pastas, key=lambda pasta: pasta["nome"].casefold())
 
 
-def listar_arquivos(token: str, drive_id: str, pasta_id: str) -> list[dict]:
+def listar_conteudo(token: str, drive_id: str, pasta_id: str) -> tuple[list[dict], list[str]]:
     itens: list[dict] = []
+    caminhos_pastas: list[str] = []
     pastas = [(pasta_id, "")]
     while pastas:
         atual, caminho_relativo = pastas.pop()
@@ -173,6 +174,7 @@ def listar_arquivos(token: str, drive_id: str, pasta_id: str) -> list[dict]:
             for item in dados.get("value", []):
                 if item.get("folder") is not None:
                     proximo_caminho = "/".join(parte for parte in [caminho_relativo, item.get("name", "")] if parte)
+                    caminhos_pastas.append(proximo_caminho)
                     pastas.append((item["id"], proximo_caminho))
                 else:
                     item["_caminho_relativo"] = caminho_relativo
@@ -181,7 +183,11 @@ def listar_arquivos(token: str, drive_id: str, pasta_id: str) -> list[dict]:
                     raise HTTPException(status_code=413, detail="A pasta possui itens demais para a importação do MVP.")
             proxima = dados.get("@odata.nextLink")
             caminho = proxima.removeprefix(GRAPH_URL) if proxima else ""
-    return itens
+    return itens, caminhos_pastas
+
+
+def listar_arquivos(token: str, drive_id: str, pasta_id: str) -> list[dict]:
+    return listar_conteudo(token, drive_id, pasta_id)[0]
 
 
 def baixar_arquivo(token: str, drive_id: str, item_id: str) -> httpx.Response:

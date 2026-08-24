@@ -446,6 +446,19 @@ class PastaOneDriveConfigurar(BaseModel):
         return "/" + "/".join(partes) if partes else "/"
 
 
+class PastaDocumentoCriar(BaseModel):
+    tipo: str
+    caminho_pai: str = Field(default="", max_length=1000)
+    nome: str = Field(min_length=1, max_length=255)
+
+    @field_validator("caminho_pai", "nome")
+    @classmethod
+    def validar_partes(cls, valor: str):
+        if ".." in valor.replace("\\", "/").split("/"):
+            raise ValueError("Caminho inválido.")
+        return valor.strip().strip("/")
+
+
 class DocumentoFinanceiroAtualizar(BaseModel):
     titulo: str = Field(min_length=3, max_length=255)
     competencia: date | None = None

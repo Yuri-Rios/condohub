@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Navbar from "@/components/Navbar";
 import Titulo from "@/components/Titulo";
 import ArvoreArquivos from "@/components/ArvoreArquivos";
+import { useAcesso } from "@/src/hooks/useAcesso";
 
 type Ata = {
   id: number;
@@ -31,10 +32,12 @@ function dataParaInput(data: string | null) {
 }
 
 export default function AtasPage() {
+  const acesso=useAcesso(); const podeEditarDrive=acesso?.papeis.some(p=>["sindico","admin"].includes(p))??false;
   const [atas, setAtas] = useState<Ata[]>([]);
   const [editando, setEditando] = useState<Ata | null>(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(true);
+  const [pastas,setPastas]=useState<string[]>([]); const [caminhoUpload,setCaminhoUpload]=useState(""); const inputArquivo=useRef<HTMLInputElement>(null);
 
   async function carregar() {
     const resposta = await fetch("/api/atas", { cache: "no-store" });
@@ -45,9 +48,11 @@ export default function AtasPage() {
       return;
     }
     setAtas(dados);
+    const estrutura=await fetch("/api/documentos-estrutura/atas",{cache:"no-store"});if(estrutura.ok)setPastas((await estrutura.json()).pastas??[]);
   }
 
   useEffect(() => {
+    void fetch("/api/documentos-estrutura/atas",{cache:"no-store"}).then(async resposta=>{if(resposta.ok)setPastas((await resposta.json()).pastas??[])});
     void fetch("/api/atas", { cache: "no-store" })
       .then(async (resposta) => ({ resposta, dados: await resposta.json() }))
       .then(({ resposta, dados }) => {
@@ -56,6 +61,10 @@ export default function AtasPage() {
         else setAtas(dados);
       });
   }, []);
+
+  async function criarPasta(){const valor=window.prompt("Caminho da nova pasta (ex.: Assembleias/2026):")?.trim().replace(/^\/+|\/+$/g,"");if(!valor)return;const partes=valor.split("/");const nome=partes.pop()!;const resposta=await fetch("/api/documentos-pastas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tipo:"atas",caminho_pai:partes.join("/"),nome})});if(!resposta.ok){const dados=await resposta.json();setErro(dados.detail??"Não foi possível criar a pasta.");return}await carregar()}
+  function escolherUpload(){const caminho=window.prompt("Pasta de destino relativa à raiz (deixe vazio para a raiz):","");if(caminho===null)return;setCaminhoUpload(caminho.trim().replace(/^\/+|\/+$/g,""));window.setTimeout(()=>inputArquivo.current?.click())}
+  async function enviarArquivo(arquivo:File){const form=new FormData();form.append("caminho",caminhoUpload);form.append("arquivo",arquivo);const resposta=await fetch("/api/documentos-upload/atas",{method:"POST",body:form});if(!resposta.ok){const dados=await resposta.json();setErro(dados.detail??"Não foi possível enviar o arquivo.");return}await carregar()}
 
   async function salvar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -87,12 +96,13 @@ export default function AtasPage() {
       <div className="mx-auto max-w-5xl">
         <Navbar />
         <Titulo texto="Atas do condomínio" subtitulo="Consulte as deliberações e registros publicados pela gestão." />
+        {podeEditarDrive&&<div className="mt-6 flex flex-wrap gap-2"><button onClick={()=>void criarPasta()} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700">Nova pasta</button><button onClick={escolherUpload} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white">Enviar arquivo</button><input ref={inputArquivo} type="file" className="sr-only" onChange={e=>{const arquivo=e.target.files?.[0];if(arquivo)void enviarArquivo(arquivo);e.target.value=""}}/></div>}
         {erro && <p className="mt-6 rounded-xl bg-rose-50 p-4 text-rose-700">{erro}</p>}
-        {carregando ? <p className="mt-8 text-slate-500">Carregando atas…</p> : atas.length === 0 ? (
+        {carregando ? <p className="mt-8 text-slate-500">Carregando atas…</p> : atas.length === 0 && pastas.length === 0 ? (
           <div className="mt-8 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">Nenhuma ata publicada ou importada.</div>
         ) : (
           <div className="mt-8">
-            <ArvoreArquivos arquivos={atas} renderArquivo={(ata) => (
+            <ArvoreArquivos arquivos={atas} pastas={pastas} renderArquivo={(ata) => (
                 <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
