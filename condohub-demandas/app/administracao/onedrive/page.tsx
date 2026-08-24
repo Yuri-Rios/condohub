@@ -34,6 +34,7 @@ export default function OneDrivePage() {
   const [mensagem, setMensagem] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [selecionados, setSelecionados] = useState<Set<TipoDocumento>>(new Set());
+  const [revisarTodos, setRevisarTodos] = useState(false);
 
   async function carregar() {
     const resposta = await fetch("/api/integracoes/onedrive", { cache: "no-store" });
@@ -114,8 +115,15 @@ export default function OneDrivePage() {
     for (const tipo of selecionados) {
       const url = tipo === "atas" ? "/api/atas/sincronizar" : `/api/documentos-financeiros/${tipo}/sincronizar`;
       const resposta = await fetch(url,{method:"POST"}); const dados=await resposta.json().catch(()=>null);
-      if (resposta.ok) resultados.push(`${rotulos[tipo]}: ${dados.importados} novo(s), ${dados.atualizados} atualizado(s)`);
-      else falhas.push(`${rotulos[tipo]}: ${mensagemErro(dados,"falha na sincronização")}`);
+      if (resposta.ok) {
+        let resumo=`${rotulos[tipo]}: ${dados.importados} novo(s), ${dados.atualizados} atualizado(s)`;
+        if(revisarTodos){
+          const revisao=await fetch(`/api/revisoes/${tipo}`,{method:"POST"}); const dadosRevisao=await revisao.json().catch(()=>null);
+          if(revisao.ok) resumo+=`, ${dadosRevisao.revisados} aprovado(s)`;
+          else falhas.push(`${rotulos[tipo]}: sincronizado, mas ${mensagemErro(dadosRevisao,"falha na aprovação em lote")}`);
+        }
+        resultados.push(resumo);
+      } else falhas.push(`${rotulos[tipo]}: ${mensagemErro(dados,"falha na sincronização")}`);
     }
     setOcupado(false); if(resultados.length)setMensagem(resultados.join(" · ")); if(falhas.length)setErro(falhas.join(" · ")); await carregar();
   }
@@ -172,7 +180,7 @@ export default function OneDrivePage() {
               {integracao.erro_ultima_sincronizacao && <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800">Último erro: {integracao.erro_ultima_sincronizacao}</p>}
               <div className="rounded-xl bg-blue-50 p-4"><h3 className="font-bold text-slate-900">O que deseja sincronizar?</h3><p className="mt-1 text-xs text-slate-600">Marque apenas as categorias que devem ser verificadas agora.</p><div className="mt-4 flex flex-wrap gap-3">
                 {categorias.map(item=>{const disponivel=Boolean(item.tipo==="atas"?(integracao.pasta&&integracao.pasta!=="/"):integracao.pastas?.[item.tipo]);return <label key={item.tipo} className={`flex items-center gap-2 rounded-xl border bg-white px-4 py-3 text-sm font-bold ${disponivel?"cursor-pointer border-blue-200 text-slate-800":"cursor-not-allowed border-slate-200 text-slate-400"}`}><input type="checkbox" disabled={!disponivel||ocupado} checked={selecionados.has(item.tipo)} onChange={()=>alternarSelecao(item.tipo)} className="h-5 w-5 accent-blue-600"/>{item.rotulo}{!disponivel&&<span className="text-[10px] font-normal">pasta não configurada</span>}</label>})}
-              </div><button disabled={ocupado||selecionados.size===0} onClick={()=>void sincronizarSelecionados()} className="mt-4 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white disabled:opacity-50">{ocupado?"Sincronizando…":`Sincronizar selecionados${selecionados.size?` (${selecionados.size})`:""}`}</button></div>
+              </div>{podeConectar&&<label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-blue-200 bg-white p-4"><input type="checkbox" disabled={ocupado} checked={revisarTodos} onChange={e=>setRevisarTodos(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-blue-600"/><span><span className="block text-sm font-bold text-slate-800">Marcar todos como revisados</span><span className="mt-1 block text-xs leading-5 text-slate-500">Aprova e disponibiliza em lote todos os documentos pendentes das categorias sincronizadas.</span></span></label>}<button disabled={ocupado||selecionados.size===0} onClick={()=>void sincronizarSelecionados()} className="mt-4 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white disabled:opacity-50">{ocupado?"Sincronizando…":`Sincronizar selecionados${selecionados.size?` (${selecionados.size})`:""}`}</button></div>
             </div>
           )}
         </section>

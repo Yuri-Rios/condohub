@@ -489,6 +489,31 @@ def listar_atas(banco: Session = Depends(pegar_banco), usuario: ContextoCondomin
     return [_ata_resposta(ata, pode_gerenciar) for ata in atas]
 
 
+@app.post("/documentos/{tipo}/revisar-todos")
+def revisar_todos_documentos(tipo: str, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_aprovador)):
+    agora = datetime.now(FUSO_BRASIL)
+    if tipo == "atas":
+        documentos = banco.query(Ata).filter(Ata.condominio_id == usuario.condominio_id, Ata.publicada.is_(False)).all()
+        for documento in documentos:
+            documento.publicada = True
+            documento.publicado_em = agora
+            documento.publicado_por = usuario.id
+    elif tipo in {"balancete", "orcamento", "contrato", "certificado", "memorial"}:
+        documentos = banco.query(DocumentoFinanceiro).filter(
+            DocumentoFinanceiro.condominio_id == usuario.condominio_id,
+            DocumentoFinanceiro.tipo == tipo,
+            DocumentoFinanceiro.publicado.is_(False),
+        ).all()
+        for documento in documentos:
+            documento.publicado = True
+            documento.publicado_em = agora
+            documento.publicado_por = usuario.id
+    else:
+        raise HTTPException(404, "Tipo de documento inválido.")
+    banco.commit()
+    return {"revisados": len(documentos)}
+
+
 @app.put("/atas/{ata_id}")
 def atualizar_ata(ata_id: int, dados: AtaAtualizar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
     ata = banco.query(Ata).filter(Ata.id == ata_id, Ata.condominio_id == usuario.condominio_id).first()
