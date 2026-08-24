@@ -13,7 +13,7 @@ export default function EntrarPage() {
           </span>
           <div>
             <p className="text-xl font-bold tracking-tight text-slate-950">CondoHub</p>
-            <p className="text-xs font-medium text-slate-500">Chamados do condomínio</p>
+            <p className="text-xs font-medium text-slate-500">Ocorrências do condomínio</p>
           </div>
         </div>
         <SignIn

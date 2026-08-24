@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "CondoHub Gestão Condominial",
-  description: "Gestão de chamados, reservas e rotinas do condomínio.",
+  description: "Gestão de ocorrências, reservas e rotinas do condomínio.",
 };
 
 export default function RootLayout({

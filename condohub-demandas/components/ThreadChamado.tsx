@@ -221,7 +221,7 @@ export default function ThreadChamado({
     setSalvandoEdicao(false);
 
     if (!resposta.ok) {
-      setErro(dados.detail ?? "Não foi possível editar o chamado.");
+      setErro(dados.detail ?? "Não foi possível editar a ocorrência.");
       return;
     }
 
@@ -306,7 +306,7 @@ export default function ThreadChamado({
             onClick={() => alterarStatus("novo")}
             className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            Reabrir chamado
+            Reabrir ocorrência
           </button>
         ) : null}
       </div>
@@ -389,7 +389,7 @@ export default function ThreadChamado({
                   onClick={iniciarEdicao}
                   className="rounded-lg px-2.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-50"
                 >
-                  Editar chamado
+                  Editar ocorrência
                 </button>
               )}
             </div>
@@ -402,7 +402,7 @@ export default function ThreadChamado({
       </div>
       )}
 
-      <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><h3 className="text-sm font-bold text-slate-900">Fotos do chamado</h3><p className="mt-1 text-xs text-slate-500">Armazenadas no espaço conectado pelo condomínio.</p></div><div className="flex flex-wrap gap-2"><input aria-label="Selecionar fotos" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e) => setFotos(Array.from(e.target.files ?? []).slice(0, 5))} className="max-w-56 text-xs text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-semibold file:text-blue-700" /><button type="button" disabled={fotos.length === 0 || enviandoFotos} onClick={() => void enviarFotos()} className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{enviandoFotos ? "Enviando..." : `Anexar${fotos.length ? ` (${fotos.length})` : ""}`}</button></div></div>
+      <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><h3 className="text-sm font-bold text-slate-900">Fotos da ocorrência</h3><p className="mt-1 text-xs text-slate-500">Armazenadas no espaço conectado pelo condomínio.</p></div><div className="flex flex-wrap gap-2"><input aria-label="Selecionar fotos" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e) => setFotos(Array.from(e.target.files ?? []).slice(0, 5))} className="max-w-56 text-xs text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-semibold file:text-blue-700" /><button type="button" disabled={fotos.length === 0 || enviandoFotos} onClick={() => void enviarFotos()} className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{enviandoFotos ? "Enviando..." : `Anexar${fotos.length ? ` (${fotos.length})` : ""}`}</button></div></div>
         {anexos.length > 0 ? <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{anexos.map((anexo) => <div key={anexo.id} className="group relative overflow-hidden rounded-xl border border-slate-200"><a href={anexo.url} target="_blank" rel="noreferrer" aria-label={`Abrir ${anexo.nome}`}><span className="block aspect-square bg-cover bg-center" style={{ backgroundImage: `url("${anexo.url}")` }} /><span className="block truncate px-2 py-2 text-xs font-semibold text-slate-600">{anexo.nome}</span></a>{anexo.pode_excluir && <button type="button" onClick={() => void excluirAnexo(anexo)} className="absolute right-2 top-2 rounded-lg bg-white/90 px-2 py-1 text-xs font-bold text-rose-600 shadow">Excluir</button>}</div>)}</div> : <p className="mt-4 text-center text-sm text-slate-400">Nenhuma foto anexada.</p>}
       </section>
 

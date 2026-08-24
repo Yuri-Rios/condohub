@@ -100,9 +100,9 @@ export default function Navbar() {
   const itensPrincipais: ItemMenu[] = [
     ...(podeAcessarModulo("chamados") ? [{
       href: "/ocorrencias",
-      label: "Chamados",
+      label: "Ocorrências",
       badge: atualizacoesChamados,
-    }, { href: "/nova-ocorrencia", label: "Novo chamado" }] : []),
+    }, { href: "/nova-ocorrencia", label: "Nova ocorrência" }] : []),
     ...(podeAgendar && podeAcessarModulo("agendamentos")
       ? [{ href: "/agendamentos", label: "Agendamentos" }]
       : []),

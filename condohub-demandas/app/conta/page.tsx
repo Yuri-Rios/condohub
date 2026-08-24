@@ -42,7 +42,7 @@ export default function ContaPage() {
           <p className="mt-3 leading-7 text-slate-600">
             A exclusão remove seu login, vínculos com condomínios, reservas,
             reações e solicitações de acesso. Registros operacionais
-            compartilhados, como chamados e históricos administrativos, são
+            compartilhados, como ocorrências e históricos administrativos, são
             mantidos sem seu nome, foto ou identificador para preservar a
             integridade dos registros do condomínio.
           </p>

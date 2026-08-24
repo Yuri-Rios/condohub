@@ -95,7 +95,7 @@ export default function OcorrenciasPage() {
 
   async function excluirOcorrencia(id: number, titulo: string) {
     const confirmou = window.confirm(
-      `Excluir definitivamente o chamado “${titulo}” e toda a conversa?`,
+      `Excluir definitivamente a ocorrência “${titulo}” e toda a conversa?`,
     );
     if (!confirmou) return;
 
@@ -108,7 +108,7 @@ export default function OcorrenciasPage() {
 
     if (!resposta.ok) {
       const dados = await resposta.json();
-      setErro(dados.detail ?? "Não foi possível excluir o chamado.");
+      setErro(dados.detail ?? "Não foi possível excluir a ocorrência.");
       return;
     }
 
@@ -172,12 +172,12 @@ export default function OcorrenciasPage() {
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <Titulo
-          texto="Chamados"
+          texto="Ocorrências"
           subtitulo="Acompanhe as solicitações registradas no condomínio."
         />
         {!carregando && !erro && (
           <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800">
-            {ocorrencias.length} {ocorrencias.length === 1 ? "chamado" : "chamados"}
+            {ocorrencias.length} {ocorrencias.length === 1 ? "ocorrência" : "ocorrências"}
           </div>
         )}
       </div>
@@ -186,7 +186,7 @@ export default function OcorrenciasPage() {
         {carregando ? (
           <div className="flex items-center gap-3 p-8 text-slate-500">
             <span className="h-5 w-5 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
-            Carregando chamados...
+            Carregando ocorrências...
           </div>
         ) : erro ? (
           <p className="m-5 rounded-xl bg-rose-50 p-4 text-rose-700">{erro}</p>
@@ -194,7 +194,7 @@ export default function OcorrenciasPage() {
           <div className="p-10 text-center">
             <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-blue-50 text-xl">✓</div>
             <h2 className="mt-4 font-semibold text-slate-900">Tudo tranquilo por aqui</h2>
-            <p className="mt-1 text-sm text-slate-500">Nenhum chamado foi registrado ainda.</p>
+            <p className="mt-1 text-sm text-slate-500">Nenhuma ocorrência foi registrada ainda.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -202,7 +202,7 @@ export default function OcorrenciasPage() {
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80">
                 <th className="px-5 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Protocolo</th>
-                <th className="px-5 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Chamado</th>
+                <th className="px-5 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Ocorrência</th>
                 <th className="px-5 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Local</th>
                 <th className="px-5 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Status</th>
                 <th className="whitespace-nowrap px-5 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Aberto há</th>
@@ -247,8 +247,8 @@ export default function OcorrenciasPage() {
                                   ocorrencia.titulo,
                                 );
                               }}
-                              aria-label={`Excluir chamado ${ocorrencia.titulo}`}
-                              title="Excluir chamado"
+                              aria-label={`Excluir ocorrência ${ocorrencia.titulo}`}
+                              title="Excluir ocorrência"
                               className="ml-auto grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-400 opacity-0 hover:bg-rose-50 hover:text-rose-600 focus:opacity-100 group-hover:opacity-100 disabled:opacity-40"
                             >
                               <svg

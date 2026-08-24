@@ -43,8 +43,8 @@ export default function NovaOcorrenciaPage() {
         const envio = await fetch(`/api/ocorrencias/${chamado.id}/anexos`, { method: "POST", body: dados });
         if (!envio.ok) {
           const detalhe = await envio.json().catch(() => null);
-          alert(`Chamado criado, mas as fotos não foram enviadas: ${detalhe?.detail ?? "tente anexá-las na conversa."}`);
-        } else alert("Chamado e fotos enviados com sucesso.");
+          alert(`Ocorrência criada, mas as fotos não foram enviadas: ${detalhe?.detail ?? "tente anexá-las na conversa."}`);
+        } else alert("Ocorrência e fotos enviadas com sucesso.");
       } else alert("Ocorrência salva com sucesso.");
 
       setTitulo("");
@@ -64,7 +64,7 @@ export default function NovaOcorrenciaPage() {
       <Navbar />
 
       <Titulo
-        texto="Novo chamado"
+        texto="Nova ocorrência"
         subtitulo="Conte o que aconteceu e informe onde a equipe deve verificar."
       />
 
@@ -87,7 +87,7 @@ export default function NovaOcorrenciaPage() {
         />
 
         <label className="block text-sm font-semibold text-slate-700">Descrição
-          <CampoComReferencias rows={5} placeholder="Descreva o problema. Use # para chamados, @ para pessoas e $ para pedidos." value={descricao} onChange={setDescricao} className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 font-normal text-slate-900 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" />
+          <CampoComReferencias rows={5} placeholder="Descreva o problema. Use # para ocorrências, @ para pessoas e $ para pedidos." value={descricao} onChange={setDescricao} className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 font-normal text-slate-900 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" />
         </label>
 
         <label className="block text-sm font-semibold text-slate-700">Fotos <span className="font-normal text-slate-400">(opcional)</span>
@@ -101,7 +101,7 @@ export default function NovaOcorrenciaPage() {
           disabled={salvando}
           className="inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
-          {salvando ? "Enviando chamado..." : "Enviar chamado"}
+          {salvando ? "Enviando ocorrência..." : "Enviar ocorrência"}
         </button>
       </form>
       </div>

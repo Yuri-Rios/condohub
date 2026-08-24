@@ -14,7 +14,7 @@ type Modulo = {
 };
 
 const descricoes: Record<string, string> = {
-  chamados: "Permitir abertura e acompanhamento de chamados.",
+  chamados: "Permitir abertura e acompanhamento de ocorrências.",
   agendamentos: "Permitir reservas dos ambientes disponíveis.",
   atas: "Disponibilizar as atas publicadas pela gestão.",
   acompanhamento: "Mostrar o andamento dos cronogramas publicados.",

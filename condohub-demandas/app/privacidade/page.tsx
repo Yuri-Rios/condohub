@@ -33,7 +33,7 @@ export default function PrivacidadePage() {
             <ul className="mt-3 list-disc space-y-2 pl-6">
               <li>identificação e contato, como nome, e-mail e foto de perfil;</li>
               <li>dados do vínculo condominial, como condomínio, função, bloco e apartamento;</li>
-              <li>conteúdo enviado no app, incluindo chamados, mensagens, reações e solicitações;</li>
+              <li>conteúdo enviado no app, incluindo ocorrências, mensagens, reações e solicitações;</li>
               <li>reservas, pedidos de compra e registros administrativos relacionados ao condomínio;</li>
               <li>dados técnicos essenciais de sessão, segurança e diagnóstico.</li>
             </ul>
@@ -43,7 +43,7 @@ export default function PrivacidadePage() {
             <h2 className="text-xl font-bold text-slate-950">3. Finalidades</h2>
             <p className="mt-2">
               Os dados são usados para autenticar usuários, validar o acesso ao
-              condomínio, operar chamados e reservas, permitir a gestão
+              condomínio, operar ocorrências e reservas, permitir a gestão
               condominial, manter a segurança e prestar suporte. Não vendemos
               dados pessoais nem os utilizamos para publicidade comportamental.
             </p>

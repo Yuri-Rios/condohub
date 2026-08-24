@@ -123,7 +123,7 @@ erro_inicializacao: str | None = None
 ATRASOS_INICIALIZACAO = (0, 2, 5, 10, 20, 30)
 VERSAO_WAKEUP = "browser-direct-v5"
 CATALOGO_MODULOS = (
-    ("chamados", "Chamados", True),
+    ("chamados", "Ocorrências", True),
     ("agendamentos", "Agendamentos", True),
     ("atas", "Atas", True),
     ("financeiro", "Balancetes e orçamentos", True),

@@ -15,7 +15,7 @@ type Condominio = {
 };
 
 const catalogo = [
-  ["chamados", "Chamados"], ["agendamentos", "Agendamentos"], ["atas", "Atas"],
+  ["chamados", "Ocorrências"], ["agendamentos", "Agendamentos"], ["atas", "Atas"],
   ["acompanhamento", "Acompanhamento"], ["compras", "Compras"], ["estoque", "Estoque"],
   ["prestadores", "Prestadores"], ["cronogramas", "Cronogramas"],
 ] as const;
