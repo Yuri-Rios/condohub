@@ -43,7 +43,28 @@ function dataAtualizacao(valor: string) {
   return new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(valor));
 }
 
+const DIA = 86_400_000;
+function dataUtc(valor:string){return new Date(`${valor}T00:00:00Z`).getTime()}
+
+function GraficoGantt({itens,hoje}:{itens:Acompanhamento[];hoje:number}) {
+  const etapas=itens.flatMap(item=>item.etapas);
+  if(!etapas.length)return null;
+  const inicio=Math.min(...etapas.map(etapa=>dataUtc(etapa.inicio_previsto)));
+  const fim=Math.max(...etapas.map(etapa=>dataUtc(etapa.fim_previsto)));
+  const totalDias=Math.max(1,Math.round((fim-inicio)/DIA)+1);
+  const largura=Math.max(760,totalDias*9);
+  const posicao=(valor:string)=>((dataUtc(valor)-inicio)/(totalDias*DIA))*100;
+  const duracao=(de:string,ate:string)=>Math.max(0.8,((dataUtc(ate)-dataUtc(de)+DIA)/(totalDias*DIA))*100);
+  const meses:Array<{rotulo:string;esquerda:number}> = [];
+  const cursor=new Date(inicio); cursor.setUTCDate(1);
+  while(cursor.getTime()<=fim){meses.push({rotulo:cursor.toLocaleDateString("pt-BR",{timeZone:"UTC",month:"short",year:"2-digit"}),esquerda:((cursor.getTime()-inicio)/(totalDias*DIA))*100});cursor.setUTCMonth(cursor.getUTCMonth()+1)}
+  const hojeVisivel=hoje>=inicio&&hoje<=fim+DIA;
+  const cores:Record<EtapaPublica["status"],string>={nao_iniciada:"bg-slate-400",em_andamento:"bg-blue-600",concluida:"bg-emerald-500",atrasada:"bg-rose-500",bloqueada:"bg-amber-500"};
+  return <section className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center"><div><h2 className="font-bold text-slate-950">Visão geral dos cronogramas</h2><p className="mt-1 text-sm text-slate-500">Etapas reunidas em uma única linha do tempo. Deslize horizontalmente para consultar todo o período.</p></div><div className="flex flex-wrap gap-2 text-[11px] font-semibold">{(["em_andamento","concluida","atrasada","bloqueada"] as const).map(status=><span key={status} className="flex items-center gap-1.5 text-slate-600"><span className={`h-2.5 w-2.5 rounded-full ${cores[status]}`}/>{situacoes[status].nome}</span>)}</div></div><div className="overflow-x-auto"><div className="grid" style={{gridTemplateColumns:`minmax(170px, 240px) ${largura}px`,minWidth:`${largura+170}px`}}><div className="sticky left-0 z-20 border-b border-r border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">Processo / etapa</div><div className="relative h-11 border-b border-slate-200 bg-slate-50">{meses.map(m=><span key={`${m.rotulo}-${m.esquerda}`} className="absolute inset-y-0 border-l border-slate-200 pl-2 pt-3 text-xs font-semibold capitalize text-slate-500" style={{left:`${Math.max(0,m.esquerda)}%`}}>{m.rotulo}</span>)}</div>{itens.flatMap(item=>[<div key={`titulo-${item.id}`} className="sticky left-0 z-20 border-b border-r border-slate-200 bg-blue-50 px-4 py-3"><p className="truncate text-sm font-bold text-blue-950">{item.titulo}</p><p className="mt-0.5 text-[11px] text-blue-700">{item.progresso}% concluído</p></div>,<div key={`linha-${item.id}`} className="relative h-14 border-b border-slate-200 bg-blue-50/40"><div className="absolute top-5 h-3 rounded-full bg-blue-200" style={{left:`${posicao(item.inicio_previsto)}%`,width:`${duracao(item.inicio_previsto,item.fim_previsto)}%`}}/>{hojeVisivel&&<span className="absolute inset-y-0 z-10 border-l-2 border-dashed border-violet-500" style={{left:`${((hoje-inicio)/(totalDias*DIA))*100}%`}}/>}</div>,...item.etapas.flatMap(etapa=>[<div key={`nome-${etapa.id}`} className="sticky left-0 z-20 flex items-center border-b border-r border-slate-100 bg-white px-4 py-2 text-xs font-medium text-slate-700"><span className={`mr-2 h-2 w-2 shrink-0 rounded-full ${cores[etapa.status]}`}/><span className="truncate">{etapa.titulo}</span></div>,<div key={`etapa-${etapa.id}`} className="relative h-10 border-b border-slate-100 bg-[linear-gradient(to_right,#f1f5f9_1px,transparent_1px)] bg-[size:9px_100%]"><div title={`${etapa.titulo}: ${dataCurta(etapa.inicio_previsto)} a ${dataCurta(etapa.fim_previsto)}`} className={`absolute top-2.5 h-5 rounded-md shadow-sm ${cores[etapa.status]}`} style={{left:`${posicao(etapa.inicio_previsto)}%`,width:`${duracao(etapa.inicio_previsto,etapa.fim_previsto)}%`}}/>{hojeVisivel&&<span className="absolute inset-y-0 z-10 border-l-2 border-dashed border-violet-500" style={{left:`${((hoje-inicio)/(totalDias*DIA))*100}%`}}/>}</div>])])}</div></div><div className="border-t border-slate-100 px-5 py-3 text-xs text-slate-500">Período: {dataCurta(new Date(inicio).toISOString().slice(0,10))} a {dataCurta(new Date(fim).toISOString().slice(0,10))}{hojeVisivel&&<span className="ml-3 text-violet-700">┊ Hoje</span>}</div></section>
+}
+
 export default function AcompanhamentoPage() {
+  const [hoje] = useState(() => Date.now());
   const [itens, setItens] = useState<Acompanhamento[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
@@ -71,7 +92,7 @@ export default function AcompanhamentoPage() {
             <p className="text-lg font-bold text-slate-900">Nenhum acompanhamento publicado</p>
             <p className="mt-2 text-sm text-slate-500">Quando a gestão publicar um cronograma, ele aparecerá aqui.</p>
           </section>
-        ) : <section className="mt-8 grid gap-6">{itens.map((item) => (
+        ) : <><GraficoGantt itens={itens} hoje={hoje}/><section className="mt-8 grid gap-6">{itens.map((item) => (
           <article key={item.id} className="overflow-hidden rounded-2xl border border-white bg-white shadow-[0_16px_50px_rgba(15,23,42,0.08)]">
             <div className="p-5 sm:p-7">
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><span className="text-xs font-bold uppercase tracking-wide text-blue-600">{item.categoria}</span><h2 className="mt-1 text-xl font-bold text-slate-950">{item.titulo}</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{item.objetivo}</p></div><strong className="text-2xl text-blue-700">{item.progresso}%</strong></div>
@@ -81,7 +102,7 @@ export default function AcompanhamentoPage() {
             </div>
             {item.ultima_atualizacao && <footer className="border-t border-blue-100 bg-blue-50 px-5 py-4 sm:px-7"><p className="text-xs font-bold uppercase tracking-wide text-blue-600">Última atualização</p><p className="mt-1 text-sm leading-6 text-blue-950">{item.ultima_atualizacao}</p><p className="mt-1 text-xs text-blue-600">{dataAtualizacao(item.atualizado_em)}</p></footer>}
           </article>
-        ))}</section>}
+        ))}</section></>}
       </div>
     </main>
   );
