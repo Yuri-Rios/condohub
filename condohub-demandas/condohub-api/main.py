@@ -1774,7 +1774,7 @@ def criar_cronograma(dados: CronogramaCriar, banco: Session = Depends(pegar_banc
         prioridade=dados.prioridade,
         orcamento_previsto=dados.orcamento_previsto,
         status=dados.status,
-        publicado=False,
+        publicado=dados.status == "planejado",
         criado_por_id=usuario.id,
         criado_por_nome=usuario.nome,
     )
@@ -1901,7 +1901,7 @@ def alterar_status_etapa(cronograma_id: int, etapa_id: int, dados: EtapaCronogra
 def listar_acompanhamento(banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
     cronogramas = (
         banco.query(Cronograma)
-        .filter(Cronograma.condominio_id == usuario.condominio_id, Cronograma.publicado.is_(True), Cronograma.status == "planejado")
+        .filter(Cronograma.condominio_id == usuario.condominio_id, Cronograma.status == "planejado")
         .order_by(Cronograma.fim_previsto.asc(), Cronograma.id.desc())
         .all()
     )
