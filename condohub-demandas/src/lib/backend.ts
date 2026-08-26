@@ -77,7 +77,6 @@ async function encaminhar(
         "content-length",
         "content-range",
         "content-type",
-        "location",
       ]) {
         const valor = resposta.headers.get(nome);
         if (valor) headers.set(nome, valor);

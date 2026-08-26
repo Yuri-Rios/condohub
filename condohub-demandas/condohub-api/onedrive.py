@@ -199,17 +199,6 @@ def baixar_arquivo(token: str, drive_id: str, item_id: str) -> httpx.Response:
     )
 
 
-def obter_url_download(token: str, drive_id: str, item_id: str) -> str:
-    item = graph_get(
-        token,
-        f"/drives/{quote(drive_id, safe='')}/items/{quote(item_id, safe='')}?$select=id,@microsoft.graph.downloadUrl",
-    ).json()
-    url = item.get("@microsoft.graph.downloadUrl")
-    if not url:
-        raise HTTPException(status_code=502, detail="O OneDrive não forneceu o endereço temporário do arquivo.")
-    return url
-
-
 def criar_caminho_pastas(token: str, drive_id: str, caminho: str) -> dict:
     atual = graph_get(token, f"/drives/{quote(drive_id, safe='')}/root?$select=id,name").json()
     for nome in [parte for parte in caminho.strip("/").split("/") if parte]:
