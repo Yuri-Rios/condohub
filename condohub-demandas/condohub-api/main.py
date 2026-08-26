@@ -1796,6 +1796,33 @@ def criar_cronograma(dados: CronogramaCriar, banco: Session = Depends(pegar_banc
     return _cronograma_resposta(cronograma, banco)
 
 
+@app.put("/cronogramas/{cronograma_id}")
+def editar_cronograma(cronograma_id: int, dados: CronogramaCriar, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(exigir_gestor)):
+    cronograma = banco.query(Cronograma).filter(Cronograma.id == cronograma_id, Cronograma.condominio_id == usuario.condominio_id).first()
+    if not cronograma:
+        raise HTTPException(404, "Cronograma não encontrado.")
+    cronograma.titulo = dados.titulo.strip(); cronograma.categoria = dados.categoria.strip()
+    cronograma.objetivo = dados.objetivo.strip(); cronograma.responsavel = dados.responsavel.strip()
+    cronograma.inicio_previsto = dados.inicio_previsto; cronograma.fim_previsto = dados.fim_previsto
+    cronograma.prioridade = dados.prioridade; cronograma.orcamento_previsto = dados.orcamento_previsto
+    cronograma.status = dados.status; cronograma.publicado = dados.status == "planejado"
+    cronograma.atualizado_em = datetime.now(FUSO_BRASIL)
+    existentes = banco.query(EtapaCronograma).filter(EtapaCronograma.cronograma_id == cronograma.id).order_by(EtapaCronograma.ordem.asc()).all()
+    for indice, etapa_dados in enumerate(dados.etapas):
+        if indice < len(existentes):
+            etapa = existentes[indice]
+        else:
+            etapa = EtapaCronograma(cronograma_id=cronograma.id, status="nao_iniciada")
+            banco.add(etapa)
+        etapa.ordem = indice + 1; etapa.titulo = etapa_dados.titulo.strip(); etapa.responsavel = etapa_dados.responsavel.strip()
+        etapa.inicio_previsto = etapa_dados.inicio_previsto; etapa.fim_previsto = etapa_dados.fim_previsto
+        etapa.custo_previsto = etapa_dados.custo_previsto
+    for etapa in existentes[len(dados.etapas):]:
+        banco.delete(etapa)
+    banco.commit(); banco.refresh(cronograma)
+    return _cronograma_resposta(cronograma, banco)
+
+
 def _modelo_cronograma_resposta(modelo: ModeloCronograma, banco: Session):
     etapas = banco.query(EtapaModeloCronograma).filter(EtapaModeloCronograma.modelo_id == modelo.id).order_by(EtapaModeloCronograma.ordem.asc()).all()
     return {
