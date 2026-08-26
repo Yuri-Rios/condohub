@@ -606,8 +606,42 @@ def atualizar_ata(ata_id: int, dados: AtaAtualizar, banco: Session = Depends(peg
     return _ata_resposta(ata, True)
 
 
+def _resposta_arquivo(conteudo: bytes, mime_type: str, nome_arquivo: str, intervalo: str | None):
+    total = len(conteudo)
+    nome_codificado = quote(nome_arquivo, safe="")
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "private, max-age=300",
+        "Content-Disposition": f"inline; filename*=UTF-8''{nome_codificado}",
+    }
+    if not intervalo:
+        headers["Content-Length"] = str(total)
+        return Response(content=conteudo, media_type=mime_type, headers=headers)
+
+    correspondencia = re.fullmatch(r"bytes=(\d*)-(\d*)", intervalo.strip())
+    if not correspondencia or not any(correspondencia.groups()):
+        return Response(status_code=416, headers={"Content-Range": f"bytes */{total}"})
+
+    inicio_texto, fim_texto = correspondencia.groups()
+    if inicio_texto:
+        inicio = int(inicio_texto)
+        fim = int(fim_texto) if fim_texto else total - 1
+    else:
+        tamanho = int(fim_texto)
+        inicio = max(total - tamanho, 0)
+        fim = total - 1
+    if inicio >= total or inicio > fim:
+        return Response(status_code=416, headers={"Content-Range": f"bytes */{total}"})
+
+    fim = min(fim, total - 1)
+    trecho = conteudo[inicio:fim + 1]
+    headers["Content-Length"] = str(len(trecho))
+    headers["Content-Range"] = f"bytes {inicio}-{fim}/{total}"
+    return Response(content=trecho, status_code=206, media_type=mime_type, headers=headers)
+
+
 @app.get("/atas/{ata_id}/arquivo")
-def obter_arquivo_ata(ata_id: int, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
+def obter_arquivo_ata(ata_id: int, request: Request, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
     ata = banco.query(Ata).filter(Ata.id == ata_id, Ata.condominio_id == usuario.condominio_id).first()
     pode_gerenciar = not usuario.papeis.isdisjoint({"sindico", "subsindico", "funcionario", "admin"})
     if not ata or (not ata.publicada and not pode_gerenciar):
@@ -616,8 +650,12 @@ def obter_arquivo_ata(ata_id: int, banco: Session = Depends(pegar_banco), usuari
     token = renovar_token(integracao)
     arquivo = baixar_arquivo(token, ata.drive_id, ata.drive_item_id)
     banco.commit()
-    nome_seguro = ata.nome_arquivo.replace('"', "")
-    return Response(content=arquivo.content, media_type=ata.mime_type or arquivo.headers.get("content-type", "application/octet-stream"), headers={"Content-Disposition": f'inline; filename="{nome_seguro}"'})
+    return _resposta_arquivo(
+        arquivo.content,
+        ata.mime_type or arquivo.headers.get("content-type", "application/octet-stream"),
+        ata.nome_arquivo,
+        request.headers.get("range"),
+    )
 
 
 def _documento_financeiro_resposta(documento: DocumentoFinanceiro, pode_gerenciar: bool):
@@ -721,15 +759,19 @@ def atualizar_documento_financeiro(documento_id: int, dados: DocumentoFinanceiro
 
 
 @app.get("/documentos-financeiros/{documento_id}/arquivo")
-def obter_arquivo_documento_financeiro(documento_id: int, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
+def obter_arquivo_documento_financeiro(documento_id: int, request: Request, banco: Session = Depends(pegar_banco), usuario: ContextoCondominio = Depends(contexto_condominio)):
     documento = banco.query(DocumentoFinanceiro).filter(DocumentoFinanceiro.id == documento_id, DocumentoFinanceiro.condominio_id == usuario.condominio_id).first()
     if documento: _exigir_modulo_documento(documento.tipo, banco, usuario)
     pode_gerenciar = not usuario.papeis.isdisjoint({"sindico", "subsindico", "funcionario", "admin"})
     if not documento or (not documento.publicado and not pode_gerenciar): raise HTTPException(404, "Documento não encontrado.")
     integracao = _integracao_onedrive(banco, usuario.condominio_id)
     arquivo = baixar_arquivo(renovar_token(integracao), documento.drive_id, documento.drive_item_id); banco.commit()
-    nome_seguro = documento.nome_arquivo.replace('"', "")
-    return Response(content=arquivo.content, media_type=documento.mime_type or arquivo.headers.get("content-type", "application/octet-stream"), headers={"Content-Disposition": f'inline; filename="{nome_seguro}"'})
+    return _resposta_arquivo(
+        arquivo.content,
+        documento.mime_type or arquivo.headers.get("content-type", "application/octet-stream"),
+        documento.nome_arquivo,
+        request.headers.get("range"),
+    )
 
 
 def _validar_data_reserva(inicio: datetime):

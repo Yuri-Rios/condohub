@@ -113,11 +113,11 @@ def renovar_token(integracao: IntegracaoOneDrive) -> str:
     return dados["access_token"]
 
 
-def graph_get(token: str, caminho: str, *, seguir_redirecionamento: bool = False) -> httpx.Response:
+def graph_get(token: str, caminho: str, *, seguir_redirecionamento: bool = False, timeout: float = 30) -> httpx.Response:
     resposta = httpx.get(
         f"{GRAPH_URL}{caminho}",
         headers={"Authorization": f"Bearer {token}"},
-        timeout=30,
+        timeout=timeout,
         follow_redirects=seguir_redirecionamento,
     )
     if resposta.is_error:
@@ -195,6 +195,7 @@ def baixar_arquivo(token: str, drive_id: str, item_id: str) -> httpx.Response:
         token,
         f"/drives/{quote(drive_id, safe='')}/items/{quote(item_id, safe='')}/content",
         seguir_redirecionamento=True,
+        timeout=60,
     )
 
 

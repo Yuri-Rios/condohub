@@ -5,6 +5,7 @@ const API_URL = process.env.API_URL;
 const STATUS_TRANSITORIOS = new Set([502, 503, 504]);
 const ATRASOS_TENTATIVAS_MS = [0, 1_000, 2_000];
 const LIMITE_REQUISICAO_MS = 5_000;
+const LIMITE_ARQUIVO_MS = 60_000;
 const CONDOMINIO_PADRAO =
   process.env.CONDOMINIO_PADRAO_SLUG ?? "camila-barbosa";
 
@@ -46,7 +47,9 @@ async function encaminhar(
     }
 
     try {
-      const limite = AbortSignal.timeout(LIMITE_REQUISICAO_MS);
+      const limite = AbortSignal.timeout(
+        caminho.endsWith("/arquivo") ? LIMITE_ARQUIVO_MS : LIMITE_REQUISICAO_MS,
+      );
       const signal = init?.signal
         ? AbortSignal.any([init.signal, limite])
         : limite;
@@ -66,11 +69,21 @@ async function encaminhar(
         continue;
       }
 
-      const headers = new Headers({
-        "content-type": resposta.headers.get("content-type") ?? "application/json",
-      });
-      const disposicao = resposta.headers.get("content-disposition");
-      if (disposicao) headers.set("content-disposition", disposicao);
+      const headers = new Headers();
+      for (const nome of [
+        "accept-ranges",
+        "cache-control",
+        "content-disposition",
+        "content-length",
+        "content-range",
+        "content-type",
+      ]) {
+        const valor = resposta.headers.get(nome);
+        if (valor) headers.set(nome, valor);
+      }
+      if (!headers.has("content-type")) {
+        headers.set("content-type", "application/json");
+      }
       return new Response(resposta.body, {
         status: resposta.status,
         headers,

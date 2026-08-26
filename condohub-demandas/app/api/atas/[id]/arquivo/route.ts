@@ -1,6 +1,9 @@
 import { chamarApi } from "@/src/lib/backend";
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-  return chamarApi(`/atas/${id}/arquivo`);
+  const intervalo = request.headers.get("range");
+  return chamarApi(`/atas/${id}/arquivo`, {
+    headers: intervalo ? { Range: intervalo } : undefined,
+  });
 }
