@@ -24,3 +24,8 @@ __pycache__/
 
 # Arquivos locais de dados e relatórios
 /data/
+
+# Operações pontuais, rascunhos e auditorias locais (não fazem parte do produto)
+.local/
+renomeacao-balancetes-*.json
+*.log

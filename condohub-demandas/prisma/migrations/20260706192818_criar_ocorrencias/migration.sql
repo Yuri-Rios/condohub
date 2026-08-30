@@ -1,8 +1,0 @@
--- CreateTable
-CREATE TABLE "Ocorrencia" (
-    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    "titulo" TEXT NOT NULL,
-    "local" TEXT NOT NULL,
-    "descricao" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);

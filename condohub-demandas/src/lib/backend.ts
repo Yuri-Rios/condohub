@@ -74,12 +74,19 @@ async function encaminhar(
         "accept-ranges",
         "cache-control",
         "content-disposition",
-        "content-length",
         "content-range",
         "content-type",
+        "location",
       ]) {
         const valor = resposta.headers.get(nome);
         if (valor) headers.set(nome, valor);
+      }
+      // fetch descompacta o corpo, mas mantém o tamanho comprimido nos headers.
+      // Repassar esse tamanho pode truncar o JSON recebido pelo navegador.
+      const codificacao = resposta.headers.get("content-encoding");
+      const tamanho = resposta.headers.get("content-length");
+      if (tamanho && (!codificacao || codificacao === "identity")) {
+        headers.set("content-length", tamanho);
       }
       if (!headers.has("content-type")) {
         headers.set("content-type", "application/json");

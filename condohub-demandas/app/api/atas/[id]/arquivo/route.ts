@@ -5,5 +5,6 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const intervalo = request.headers.get("range");
   return chamarApi(`/atas/${id}/arquivo`, {
     headers: intervalo ? { Range: intervalo } : undefined,
+    redirect: "manual",
   });
 }

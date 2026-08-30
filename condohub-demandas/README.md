@@ -22,7 +22,19 @@ Você já fez um componente (NovaOcorrencia). Agora vamos criar outro.
 
 ------------------------------------------------------
 
-## Getting Started
+## Organização do repositório
+
+Scripts usados uma única vez (correções de dados, renomeações ou importações
+manuais), relatórios de execução e backups devem ficar em `.local/` (ignorado
+pelo Git) ou fora do repositório. Não devem ser incluídos em commits.
+
+O banco da aplicação é mantido pela API Python com SQLAlchemy/PostgreSQL.
+As migrações SQL listadas em `condohub-api/migrations_runner.py` fazem parte da
+inicialização da API e precisam acompanhar o código. Não removê-las apenas
+porque já foram executadas no banco atual. Testes de regressão e arquivos
+necessários ao build também devem permanecer versionados.
+
+## Executar o frontend
 
 First, run the development server:
 
